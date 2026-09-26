@@ -9,12 +9,20 @@ ENV_FILE="$PROJECT_DIR/.env"
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
 DB_USER="${DB_USER:-mdmesh}"
 DB_NAME="${DB_NAME:-mdmesh}"
+DB_HOST="${DB_HOST:-postgres}"
+DB_PORT="${DB_PORT:-5432}"
+: "${DB_PASSWORD:?DB_PASSWORD is required for database rollback}"
 HEALTH_URL="${HEALTH_URL:-http://server:8080/rest/public/name}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
 
 phase() { echo "PHASE $1"; }
 errln() { echo "ERR $1" >&2; }
 dc()    { docker compose "$@"; }
+db_restore() {
+  PGPASSWORD="$DB_PASSWORD" psql \
+    --host="$DB_HOST" --port="$DB_PORT" --username="$DB_USER" \
+    --dbname="$DB_NAME" --set=ON_ERROR_STOP=1
+}
 
 cd "$PROJECT_DIR" || { errln "cannot cd $PROJECT_DIR"; phase failed; exit 1; }
 
@@ -57,7 +65,7 @@ dc up -d --no-deps server caddy || errln "recreate failed"
 
 # Restore the database dump (plain SQL with --clean; self-resets to the old schema).
 if [ -s "$SQL_SNAP" ]; then
-  if ! dc exec -T postgres psql -U "$DB_USER" "$DB_NAME" < "$SQL_SNAP" >/dev/null 2>&1; then
+  if ! db_restore < "$SQL_SNAP" >/dev/null 2>&1; then
     errln "db restore reported errors (see $SQL_SNAP)"
   fi
 else

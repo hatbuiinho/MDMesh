@@ -18,12 +18,25 @@ ENV_FILE="$PROJECT_DIR/.env"
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
 DB_USER="${DB_USER:-mdmesh}"
 DB_NAME="${DB_NAME:-mdmesh}"
+DB_HOST="${DB_HOST:-postgres}"
+DB_PORT="${DB_PORT:-5432}"
+: "${DB_PASSWORD:?DB_PASSWORD is required for database backup and rollback}"
 HEALTH_URL="${HEALTH_URL:-http://server:8080/rest/public/name}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
 
 phase() { echo "PHASE $1"; }
 errln() { echo "ERR $1" >&2; }
 dc()    { docker compose "$@"; }
+db_dump() {
+  PGPASSWORD="$DB_PASSWORD" pg_dump \
+    --host="$DB_HOST" --port="$DB_PORT" --username="$DB_USER" \
+    --clean --if-exists --no-owner --no-privileges "$DB_NAME"
+}
+db_restore() {
+  PGPASSWORD="$DB_PASSWORD" psql \
+    --host="$DB_HOST" --port="$DB_PORT" --username="$DB_USER" \
+    --dbname="$DB_NAME" --set=ON_ERROR_STOP=1
+}
 
 cd "$PROJECT_DIR" || { errln "cannot cd $PROJECT_DIR"; phase failed; exit 1; }
 
@@ -65,7 +78,7 @@ rollback() {
   set_env CURRENT_VERSION "$OLD_SERVER"
   dc up -d --no-deps server caddy || errln "rollback recreate failed"
   if [ -s "$BACKUP_SQL" ]; then
-    if ! dc exec -T postgres psql -U "$DB_USER" "$DB_NAME" < "$BACKUP_SQL" >/dev/null 2>&1; then
+    if ! db_restore < "$BACKUP_SQL" >/dev/null 2>&1; then
       errln "db restore reported errors (see $BACKUP_SQL)"
     fi
   fi
@@ -76,7 +89,7 @@ rollback() {
 phase backup
 mkdir -p "$BACKUP_DIR"
 { echo "SERVER_VERSION=$OLD_SERVER"; echo "WEB_VERSION=$OLD_WEB"; } > "$BACKUP_ENV"
-if ! dc exec -T postgres pg_dump --clean --if-exists -U "$DB_USER" "$DB_NAME" > "$BACKUP_SQL"; then
+if ! db_dump > "$BACKUP_SQL"; then
   errln "pg_dump failed — aborting before any change"
   rm -f "$BACKUP_SQL"
   phase failed

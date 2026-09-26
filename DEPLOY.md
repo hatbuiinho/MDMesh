@@ -5,6 +5,27 @@
 Three ways to run it. All generate secrets and a working admin login — no default passwords, and the
 admin is forced to set its own password on first login.
 
+## Existing reverse proxy and PostgreSQL
+
+When TLS is already terminated by a reverse proxy and PostgreSQL already runs in Docker, use the
+external-infrastructure deployment. The proxy and database must share an external Docker network
+with MDMesh. Caddy remains an HTTP-only internal gateway because the web image uses it to serve the
+SPA and route API, WebSocket, update and recovery paths.
+
+```bash
+BASE_URL=https://mdm.example.com \
+DB_HOST=postgres-container \
+DB_USER=mdmesh \
+DB_PASSWORD='replace-me' \
+EXTERNAL_NETWORK=proxy_network \
+./setup-external.sh
+```
+
+Configure the reverse proxy upstream as `http://mdmesh-web:80`, enable WebSocket forwarding, and do
+not add per-path routes. `docker-compose.external.yml` publishes no host ports and does not create or
+own PostgreSQL storage. The supervisor connects directly to the external database for pre-update
+backup and rollback.
+
 ## Option A — one line, no clone (published images)
 
 The fastest path: pull the released images from GHCR — no clone, no build. Needs only Docker + `curl`.
