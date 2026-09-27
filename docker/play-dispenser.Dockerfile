@@ -19,7 +19,9 @@ RUN apk add --no-cache ca-certificates \
  && addgroup -S dispenser && adduser -S -G dispenser -h /data dispenser
 COPY --from=build /out/dispenser /usr/local/bin/dispenser
 COPY --from=source /src/resources /app/resources
-COPY --from=source /src/LICENSE /usr/share/licenses/gplaydl-dispenser/LICENSE
+# The pinned upstream commit declares GPL-3.0-only in README.md but does not
+# publish a standalone LICENSE file, so retain that notice in the image.
+COPY --from=source /src/README.md /usr/share/licenses/gplaydl-dispenser/README.md
 WORKDIR /app
 USER dispenser
 EXPOSE 8080

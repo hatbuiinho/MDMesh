@@ -75,6 +75,24 @@ else
   say "Reusing existing .env."
 fi
 
+# Stable credentials for the optional private Play dispenser. Existing values
+# are always preserved so encrypted account tokens remain decryptable.
+setenv() {
+  if grep -q "^$1=" .env 2>/dev/null; then sed -i "s#^$1=.*#$1=$2#" .env; else printf '%s=%s\n' "$1" "$2" >> .env; fi
+}
+set -a; . ./.env; set +a
+PLAY_BRIDGE_API_KEY=${PLAY_BRIDGE_API_KEY:-$(rand)}
+PLAY_DISPENSER_DB_PASSWORD=${PLAY_DISPENSER_DB_PASSWORD:-$(rand)}
+PLAY_DISPENSER_ENCRYPTION_KEY=${PLAY_DISPENSER_ENCRYPTION_KEY:-$(openssl rand -hex 32)}
+PLAY_DISPENSER_PUBLIC_URL=${PLAY_DISPENSER_PUBLIC_URL:-${BASE_URL%/}/play-dispenser}
+setenv PLAY_BRIDGE_API_KEY "$PLAY_BRIDGE_API_KEY"
+setenv PLAY_DISPENSER_DB_PASSWORD "$PLAY_DISPENSER_DB_PASSWORD"
+setenv PLAY_DISPENSER_ENCRYPTION_KEY "$PLAY_DISPENSER_ENCRYPTION_KEY"
+setenv PLAY_DISPENSER_PUBLIC_URL "$PLAY_DISPENSER_PUBLIC_URL"
+setenv PLAY_STORE_ENABLED "${PLAY_STORE_ENABLED:-false}"
+export PLAY_BRIDGE_API_KEY PLAY_DISPENSER_DB_PASSWORD PLAY_DISPENSER_ENCRYPTION_KEY
+export PLAY_DISPENSER_PUBLIC_URL PLAY_STORE_ENABLED
+
 set -a; . ./.env; set +a
 HOST=${BASE_URL#*://}; HOST=${HOST%%/*}
 COMPOSE=(docker compose)
@@ -97,8 +115,14 @@ else
   "${COMPOSE[@]}" pull server caddy
 fi
 "${COMPOSE[@]}" build supervisor
+if [[ ",${COMPOSE_PROFILES:-}," == *,playstore,* ]]; then
+  "${COMPOSE[@]}" build server caddy play-bridge play-dispenser
+fi
 say "Starting MDMesh..."
 "${COMPOSE[@]}" up -d server supervisor caddy
+if [[ ",${COMPOSE_PROFILES:-}," == *,playstore,* ]]; then
+  "${COMPOSE[@]}" --profile playstore up -d play-dispenser-db play-dispenser play-bridge
+fi
 
 say "Waiting for Liquibase initialization..."
 BOOTED=0

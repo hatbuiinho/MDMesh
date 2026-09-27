@@ -23,11 +23,77 @@ services:
       SMTP_FROM: ${SMTP_FROM:-mdm@localhost}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      PLAY_STORE_ENABLED: ${PLAY_STORE_ENABLED:-false}
+      PLAY_BRIDGE_URL: ${PLAY_BRIDGE_URL:-http://play-bridge:8787}
+      PLAY_BRIDGE_API_KEY: ${PLAY_BRIDGE_API_KEY:-}
+      PLAY_DEVICE_PROFILE: ${PLAY_DEVICE_PROFILE:-arm64-v8a}
+      PLAY_DISPENSER_PUBLIC_URL: ${PLAY_DISPENSER_PUBLIC_URL:-}
     volumes:
       - mdmeshdata:/opt/mdmesh
     networks:
       - internal
       - external
+
+  play-bridge:
+    profiles: ["playstore"]
+    image: mdmesh-play-bridge:external
+    build:
+      context: ./play-bridge
+    restart: unless-stopped
+    depends_on:
+      play-dispenser:
+        condition: service_healthy
+    environment:
+      PLAY_BRIDGE_API_KEY: ${PLAY_BRIDGE_API_KEY:-}
+      GPLAYDL_DISPENSER_URL: http://play-dispenser:8080
+      PLAY_DEVICE_ARCH: ${PLAY_DEVICE_ARCH:-arm64}
+      PLAY_DEVICE_LOCALE: ${PLAY_DEVICE_LOCALE:-en-US}
+    volumes:
+      - playdata:/data
+    networks:
+      - internal
+
+  play-dispenser-db:
+    profiles: ["playstore"]
+    image: postgres:14-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dispenser
+      POSTGRES_USER: dispenser
+      POSTGRES_PASSWORD: ${PLAY_DISPENSER_DB_PASSWORD:-}
+    volumes:
+      - playdb:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dispenser -d dispenser"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - internal
+
+  play-dispenser:
+    profiles: ["playstore"]
+    image: mdmesh-play-dispenser:external
+    build:
+      context: .
+      dockerfile: docker/play-dispenser.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      play-dispenser-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://dispenser:${PLAY_DISPENSER_DB_PASSWORD:-}@play-dispenser-db:5432/dispenser?sslmode=disable
+      DISPENSER_ENCRYPTION_KEY: ${PLAY_DISPENSER_ENCRYPTION_KEY:-}
+      PUBLIC_URL: ${PLAY_DISPENSER_PUBLIC_URL:-}
+      DEFAULT_DEVICE: arm64_xxhdpi
+      RESOURCES_DIR: /app/resources
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - internal
 
   caddy:
     image: ghcr.io/${IMAGE_OWNER:-mdmesh-app}/mdmesh-web:${WEB_VERSION:-latest}
@@ -110,3 +176,5 @@ volumes:
   caddy_data:
   caddy_config:
   backups:
+  playdata:
+  playdb:
