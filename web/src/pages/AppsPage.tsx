@@ -226,34 +226,43 @@ function PlayStoreSource({ onDeploy }: { onDeploy: (s: DeploySubject) => void })
   }
   if (!status.linked) {
     return (
-      <div className="panel" style={{ maxWidth: 680 }}>
-        <div className="panel-head"><h2 className="panel-title">Link a private Play account</h2></div>
-        <p className="note">Use a dedicated Google account. Its password and 2FA stay on the Android Authenticator; MDMesh receives only a revocable dispenser key.</p>
-        <ol className="note" style={{ lineHeight: 1.8 }}>
-          <li>Install gplaydl Authenticator on an Android phone.</li>
-          <li>In Authenticator Settings, set the server to <span className="mono">{status.dispenserUrl}</span>.</li>
-          <li>Add the dedicated Google account, open “Link gplaydl”, then enter the code below.</li>
-        </ol>
-        <div className="form-row" style={{ alignItems: 'end' }}>
-          <label className="field" style={{ maxWidth: 260 }}><span>Pairing code</span>
-            <input className="input mono" value={pairingCode} maxLength={9} placeholder="ABCD-EFGH" onChange={(e) => setPairingCode(e.target.value.toUpperCase())} />
+      <div className="play-onboard">
+        <div className="play-onboard-main">
+          <div className="play-mark" aria-hidden="true">▶</div>
+          <div>
+            <span className="play-eyebrow">Private Play access</span>
+            <h2>Connect a Play account</h2>
+            <p>Your credentials and 2FA remain on Authenticator. MDMesh stores only a revocable dispenser key.</p>
+          </div>
+        </div>
+        <div className="play-steps">
+          <div className="play-step"><span>1</span><div><b>Install Authenticator</b><small>Use a dedicated Google account.</small></div></div>
+          <div className="play-step"><span>2</span><div><b>Set your server</b><small className="mono">{status.dispenserUrl}</small></div></div>
+          <div className="play-step"><span>3</span><div><b>Link gplaydl</b><small>Enter the one-time code below.</small></div></div>
+        </div>
+        <div className="play-pair">
+          <label className="field"><span>Pairing code</span>
+            <input className="input mono" value={pairingCode} maxLength={9} placeholder="ABCD-EFGH" autoComplete="off" onChange={(e) => setPairingCode(e.target.value.toUpperCase())} />
           </label>
           <button className="btn btn-primary" disabled={pairing || pairingCode.trim().length < 8} onClick={pairAccount}>{pairing ? 'Linking…' : 'Link account'}</button>
+          <a className="btn" href="https://github.com/rehmatworks/gplaydl-authenticator/releases" target="_blank" rel="noreferrer">Get Authenticator ↗</a>
         </div>
-        <p className="note"><a href="https://github.com/rehmatworks/gplaydl-authenticator/releases" target="_blank" rel="noreferrer">Download Authenticator ↗</a></p>
       </div>
     );
   }
 
   return (
-    <>
-      <div className="dv-search" style={{ width: 340, marginBottom: 16 }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
-        <input type="search" placeholder="Search Play Store" value={q} onChange={(e) => setQ(e.target.value)} />
+    <div className="play-store">
+      <div className="play-toolbar">
+        <div className="dv-search play-search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
+          <input type="search" placeholder="Search by app name or package ID" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+        </div>
+        <span className="play-connected"><i /> Private account connected</span>
       </div>
       {error && <div className="banner banner-alert">{error}</div>}
       {searching ? <div className="panel"><div className="empty"><span className="spin" /> Searching Play Store…</div></div>
-        : q.trim().length < 2 ? <div className="panel"><div className="empty"><span className="label">Search free Play Store apps</span>Enter at least two characters or an exact package name.</div></div>
+        : q.trim().length < 2 ? <div className="play-empty"><div className="play-empty-mark" aria-hidden="true">▶</div><span className="label">Find apps on Google Play</span><p>Search free apps by name or paste an exact package ID.</p></div>
         : apps.length === 0 ? <div className="panel"><div className="empty"><span className="label">No results</span>No compatible apps matched your search.</div></div>
         : <div className="app-grid">{apps.map((app) => {
           const blocked = app.paid || app.compatible === false;
@@ -265,8 +274,8 @@ function PlayStoreSource({ onDeploy }: { onDeploy: (s: DeploySubject) => void })
             </div>
           </div>;
         })}</div>}
-      <p className="note" style={{ marginTop: 14 }}>Imported artifacts are stored on MDMesh for the configured {status.profile} profile. Aurora uses an unofficial Google Play protocol.</p>
-    </>
+      <div className="play-footnote">Imports are stored in your Library for <span className="mono">{status.profile}</span>. Play access uses an unofficial protocol.</div>
+    </div>
   );
 }
 
