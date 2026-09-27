@@ -8,10 +8,9 @@ import javax.inject.Singleton
  * In-memory buffer of command results awaiting delivery. Results are posted on the
  * *next* check-in (the request carries acks for the previous batch).
  *
- * Deliberately in-memory: if the process dies before acks are delivered, the server
- * simply never marks those commands done and re-sends them; handlers are idempotent
- * (the sync loop reconciles), so the outcome self-heals. Persisting acks is a possible
- * later optimisation, not a correctness requirement.
+ * This buffer is deliberately in-memory. The server leases an unacknowledged idempotent
+ * `config.apply` back to the delivery queue, so a process death between execution and the next
+ * check-in self-heals. Other commands retain their longer server-side execution lease.
  */
 @Singleton
 class PendingResults @Inject constructor() {

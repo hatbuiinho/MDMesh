@@ -150,4 +150,15 @@ public class AgentRolloutDatabaseTest {
             assertEquals("pending",mapper.target(r.getId(),"offline").getCommandStatus());
         } finally { pool.shutdownNow(); }
     }
+
+    @Test public void staleConfigApplyIsRequeuedWithoutTouchingOtherCommands() throws Exception {
+        sql("INSERT INTO agentCommand(deviceNumber,type,status,createdAt,deliveredAt) VALUES" +
+                "('offline','config.apply','delivered',1,10)," +
+                "('offline','app.install','delivered',1,10)");
+        AgentCommandMapper commands = session.getMapper(AgentCommandMapper.class);
+        assertEquals(1, commands.requeueStaleConfigApply("offline", 11));
+        assertEquals(1, commands.listPending("offline").size());
+        assertEquals("config.apply", commands.listPending("offline").get(0).getType());
+        assertEquals(0, commands.requeueStaleConfigApply("offline", 11));
+    }
 }

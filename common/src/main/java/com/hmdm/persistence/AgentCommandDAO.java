@@ -78,6 +78,11 @@ public class AgentCommandDAO {
         return mapper.claimForDelivery(commandId, deliveredAt) == 1;
     }
 
+    /** Return config.apply commands with a lost result to the delivery queue. */
+    public boolean requeueStaleConfigApply(String deviceNumber, long leaseMillis, long now) {
+        return mapper.requeueStaleConfigApply(deviceNumber, now - leaseMillis) > 0;
+    }
+
     /**
      * Lazy TTL expiry. Pending commands age out {@code pendingTtlMillis} after creation;
      * delivered ones get their own {@code deliveredTtlMillis} leash from delivery time (the
