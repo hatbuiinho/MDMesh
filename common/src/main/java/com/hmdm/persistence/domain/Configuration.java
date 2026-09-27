@@ -140,6 +140,10 @@ public class Configuration implements CustomerData, Serializable {
     private String eventReceivingComponent;
     @ApiModelProperty("A flag indicating if MDM is operating in kiosk mode")
     private boolean kioskMode;
+    @ApiModelProperty("Hide launchable applications not assigned to this configuration")
+    private boolean appAllowlist;
+    @ApiModelProperty("Additional package IDs allowed by the app allowlist, separated by commas or whitespace")
+    private String appAllowlistPackages;
     @ApiModelProperty("A package ID for content application")
     private Integer contentAppId;
     @ApiModelProperty("WiFi SSID for provisioning")
@@ -410,6 +414,22 @@ public class Configuration implements CustomerData, Serializable {
 
     public void setKioskMode(boolean kioskMode) {
         this.kioskMode = kioskMode;
+    }
+
+    public boolean isAppAllowlist() {
+        return appAllowlist;
+    }
+
+    public void setAppAllowlist(boolean appAllowlist) {
+        this.appAllowlist = appAllowlist;
+    }
+
+    public String getAppAllowlistPackages() {
+        return appAllowlistPackages;
+    }
+
+    public void setAppAllowlistPackages(String appAllowlistPackages) {
+        this.appAllowlistPackages = appAllowlistPackages;
     }
 
     public String getQrCodeKey() {
@@ -894,6 +914,8 @@ public class Configuration implements CustomerData, Serializable {
         copy.setContentAppId(getContentAppId());
         copy.setEventReceivingComponent(getEventReceivingComponent());
         copy.setKioskMode(isKioskMode());
+        copy.setAppAllowlist(isAppAllowlist());
+        copy.setAppAllowlistPackages(getAppAllowlistPackages());
         copy.setWifiSSID(getWifiSSID());
         copy.setWifiPassword(getWifiPassword());
         copy.setWifiSecurityType(getWifiSecurityType());

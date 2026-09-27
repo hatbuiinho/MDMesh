@@ -65,6 +65,8 @@ import com.mdmesh.oem.GenericOemAdapter
 import com.mdmesh.oem.KnoxAdapter
 import com.mdmesh.oem.OemAdapter
 import com.mdmesh.policy.CapabilityRegistry
+import com.mdmesh.policy.ApplicationAllowlist
+import com.mdmesh.policy.DeviceOwnerApplicationAllowlist
 import com.mdmesh.policy.TogglePolicy
 import com.mdmesh.policy.wifi.DpmHandle
 import com.mdmesh.remote.RemoteControlTierDetector
@@ -328,12 +330,20 @@ object AgentModule {
 
     @Provides
     @Singleton
+    fun provideApplicationAllowlist(
+        @ApplicationContext context: Context,
+        handle: DpmHandle,
+    ): ApplicationAllowlist = DeviceOwnerApplicationAllowlist(context, handle.dpm, handle.admin)
+
+    @Provides
+    @Singleton
     fun provideConfigApplier(
         toggles: Map<String, @JvmSuppressWildcards TogglePolicy>,
         kiosk: KioskApplier,
         location: LocationModeStore,
         store: ConfigStateStore,
-    ): ConfigApplier = ConfigApplier(toggles, kiosk, location::set, store)
+        applicationAllowlist: ApplicationAllowlist,
+    ): ConfigApplier = ConfigApplier(toggles, kiosk, location::set, store, applicationAllowlist)
 
     @Provides
     @IntoSet

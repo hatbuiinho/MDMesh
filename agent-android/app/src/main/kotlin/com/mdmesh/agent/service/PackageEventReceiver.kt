@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.mdmesh.core.telemetry.EventLog
+import com.mdmesh.core.sync.ConfigReapplyWorker
 import com.mdmesh.proto.EventType
 
 /** Records app install/uninstall events into the telemetry [EventLog]. */
@@ -18,5 +19,8 @@ class PackageEventReceiver : BroadcastReceiver() {
             Intent.ACTION_PACKAGE_REMOVED ->
                 if (!replacing) runCatching { EventLog(context).record(EventType.APP_UNINSTALLED, pkg) }
         }
+        // A newly installed launcher app must not remain usable until the next periodic check-in.
+        // Removal also prunes the set of packages whose hidden state MDMesh owns.
+        runCatching { ConfigReapplyWorker.scheduleNow(context) }
     }
 }

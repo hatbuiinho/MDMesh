@@ -90,6 +90,29 @@ public class DesiredConfigBuilderTest {
     }
 
     @Test
+    public void app_allowlist_contains_install_apps_and_additional_system_packages() {
+        Configuration c = kioskConfig();
+        c.setAppAllowlist(true);
+        c.setAppAllowlistPackages("com.android.settings, com.vendor.updater\ncom.android.settings");
+        DesiredConfig d = DesiredConfigBuilder.build(c, Arrays.asList(
+                app(1, 101, "com.acme.pos", 1),
+                app(2, 202, "com.acme.hidden", 0),
+                app(3, 303, "com.acme.removed", 2)));
+
+        assertTrue(d.getApplications().isEnforceAllowlist());
+        assertEquals(Arrays.asList("com.acme.pos", "com.android.settings", "com.vendor.updater"),
+                d.getApplications().getAllowedPackages());
+        assertEquals(DesiredConfigBuilder.APP_ALLOWLIST_CAPABILITY, DesiredConfigBuilder.requiredCapability(d));
+    }
+
+    @Test
+    public void disabled_app_allowlist_keeps_base_config_capability() {
+        DesiredConfig d = DesiredConfigBuilder.build(kioskConfig(), Collections.emptyList());
+        assertFalse(d.getApplications().isEnforceAllowlist());
+        assertEquals(DesiredConfigBuilder.CAPABILITY, DesiredConfigBuilder.requiredCapability(d));
+    }
+
+    @Test
     public void revision_is_stable_and_independent_of_field_order_and_revision_field() {
         DesiredConfig a = DesiredConfigBuilder.build(kioskConfig(), Arrays.asList(app(5, 505, "com.acme.pos", 1)));
         DesiredConfig b = DesiredConfigBuilder.build(kioskConfig(), Arrays.asList(app(5, 505, "com.acme.pos", 1)));

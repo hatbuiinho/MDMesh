@@ -2889,4 +2889,16 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="26.09.27-configuration-app-allowlist" author="mdmesh" context="common">
+        <comment>Opt-in desired-state policy for hiding launchable packages outside the configuration app list.</comment>
+        <sql>
+            ALTER TABLE configurations ADD COLUMN appAllowlist BOOLEAN NOT NULL DEFAULT FALSE;
+            ALTER TABLE configurations ADD COLUMN appAllowlistPackages TEXT;
+        </sql>
+        <rollback>
+            ALTER TABLE configurations DROP COLUMN appAllowlistPackages;
+            ALTER TABLE configurations DROP COLUMN appAllowlist;
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

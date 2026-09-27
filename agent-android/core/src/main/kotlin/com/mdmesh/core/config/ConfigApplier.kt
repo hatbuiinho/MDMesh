@@ -4,6 +4,7 @@ import com.mdmesh.core.kiosk.KioskApplier
 import com.mdmesh.core.store.ConfigStateStore
 import com.mdmesh.kiosk.KioskResult
 import com.mdmesh.policy.PolicyOutcome
+import com.mdmesh.policy.ApplicationAllowlist
 import com.mdmesh.policy.TogglePolicy
 import com.mdmesh.proto.ConfigApplyPayload
 import com.mdmesh.proto.ConfigApplyResult
@@ -27,6 +28,9 @@ class ConfigApplier(
     private val kiosk: KioskApplier,
     private val setLocationMode: (String) -> Unit,
     private val store: ConfigStateStore,
+    private val applicationAllowlist: ApplicationAllowlist = ApplicationAllowlist { _, _ ->
+        com.mdmesh.policy.ApplicationAllowlistResult(false)
+    },
 ) {
     private val mutex = Mutex()
 
@@ -42,6 +46,10 @@ class ConfigApplier(
             }
         }
         applyKiosk(doc)?.let { outcomes["kiosk"] = it }
+        outcomes["applications.allowlist"] = applicationAllowlist.apply(
+            doc.applications.enforceAllowlist,
+            doc.applications.allowedPackages.toSet(),
+        ).outcome()
         doc.location?.let { loc ->
             outcomes["location"] = runCatching { setLocationMode(loc.mode); ConfigOutcome.APPLIED }
                 .getOrElse { ConfigOutcome.failed(it.message ?: "location mode") }

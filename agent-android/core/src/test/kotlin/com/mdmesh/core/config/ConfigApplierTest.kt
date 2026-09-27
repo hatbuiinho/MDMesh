@@ -8,6 +8,8 @@ import com.mdmesh.core.store.InMemoryKioskStateStore
 import com.mdmesh.kiosk.KioskController
 import com.mdmesh.kiosk.KioskResult
 import com.mdmesh.policy.PolicyOutcome
+import com.mdmesh.policy.ApplicationAllowlist
+import com.mdmesh.policy.ApplicationAllowlistResult
 import com.mdmesh.policy.TogglePolicy
 import com.mdmesh.proto.ConfigApplyPayload
 import com.mdmesh.proto.ConfigLocation
@@ -41,7 +43,8 @@ class ConfigApplierTest {
         val r = ConfigApplier(mapOf("wifi" to wifi, "bluetooth" to bt), kiosk(FakeController()), { loc = it }, store)
             .apply(ConfigApplyPayload(revision = "r1", policies = mapOf("wifi" to false), location = ConfigLocation("active")))
         assertEquals("no kiosk in the doc and none previously applied -> no kiosk key",
-            mapOf("policies.wifi" to ConfigOutcome.APPLIED, "location" to ConfigOutcome.APPLIED), r.outcomes)
+            mapOf("policies.wifi" to ConfigOutcome.APPLIED, "applications.allowlist" to ConfigOutcome.UNSUPPORTED,
+                "location" to ConfigOutcome.APPLIED), r.outcomes)
         assertEquals(false, wifi.last); assertNull("bluetooth not in doc -> untouched", bt.last)
         assertEquals("active", loc)
         assertEquals("r1", store.revision())
@@ -100,5 +103,21 @@ class ConfigApplierTest {
         val r = ConfigApplier(mapOf("wifi" to wifi), kiosk(FakeController()), {}, store).reapplyPersisted()
         assertEquals("p1", r?.revision); assertEquals(true, wifi.last)
         assertNull(ConfigApplier(emptyMap(), kiosk(FakeController()), {}, InMemoryConfigStateStore()).reapplyPersisted())
+    }
+
+    @Test fun `applies application allowlist packages`() = runTest {
+        var enabled: Boolean? = null
+        var packages: Set<String>? = null
+        val allowlist = ApplicationAllowlist { value, allowed ->
+            enabled = value; packages = allowed; ApplicationAllowlistResult(true, hidden = 2)
+        }
+        val r = ConfigApplier(emptyMap(), kiosk(FakeController()), {}, InMemoryConfigStateStore(), allowlist)
+            .apply(ConfigApplyPayload(
+                revision = "apps1",
+                applications = com.mdmesh.proto.ConfigApplications(true, listOf("com.acme.pos", "com.android.settings")),
+            ))
+        assertEquals(true, enabled)
+        assertEquals(setOf("com.acme.pos", "com.android.settings"), packages)
+        assertEquals("applied: hidden=2, restored=0", r.outcomes["applications.allowlist"])
     }
 }

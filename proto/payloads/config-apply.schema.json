@@ -26,6 +26,16 @@
         "theme": { "type": "object", "properties": { "backgroundColor": {"type":"string"}, "textColor": {"type":"string"}, "iconSize": {"type":"string"} } }
       }
     },
+    "applications": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enforceAllowlist", "allowedPackages"],
+      "properties": {
+        "enforceAllowlist": { "type": "boolean" },
+        "allowedPackages": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+      },
+      "description": "When enabled, hide launchable packages outside this allowlist. Agent and platform-critical packages are protected automatically."
+    },
     "location": { "type": "object", "properties": { "mode": { "enum": ["passive", "active"] } } }
   }
 }

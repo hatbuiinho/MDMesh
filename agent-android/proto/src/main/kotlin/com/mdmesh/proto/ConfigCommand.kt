@@ -18,7 +18,14 @@ data class ConfigApplyPayload(
     val configurationId: Int? = null,
     val policies: Map<String, Boolean> = emptyMap(),
     val kiosk: KioskApplyPayload? = null,
+    val applications: ConfigApplications = ConfigApplications(),
     val location: ConfigLocation? = null,
+)
+
+@Serializable
+data class ConfigApplications(
+    val enforceAllowlist: Boolean = false,
+    val allowedPackages: List<String> = emptyList(),
 )
 
 @Serializable

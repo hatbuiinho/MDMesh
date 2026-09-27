@@ -406,6 +406,12 @@ function ConfigEditor({
       toast.push('err', 'Still loading', 'The assigned apps are still loading — try again in a moment.');
       return;
     }
+    const hasAssignedAllowedApp = allowed.some((a) => (a.action ?? 1) === 1 && a.pkg?.trim());
+    const hasAdditionalAllowedPackage = Boolean(String(draft.appAllowlistPackages ?? '').trim());
+    if (draft.appAllowlist && !hasAssignedAllowedApp && !hasAdditionalAllowedPackage) {
+      toast.push('err', 'Allowed app required', 'Add an app with the Install action or enter an allowed system package before enabling the app allowlist.');
+      return;
+    }
     const keys = isNew ? [] : kioskAffectingChanges(baseline, draft);
     // deviceCount null = unknown -> confirm anyway (fail closed); 0 = no device will re-apply.
     if (keys.length > 0 && deviceCount !== 0) { setConfirmKeys(keys); return; }

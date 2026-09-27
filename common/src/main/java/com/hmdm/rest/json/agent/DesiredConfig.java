@@ -45,5 +45,6 @@ public class DesiredConfig {
      * exits only if the previously applied configuration document had kiosk.
      */
     private DesiredKiosk kiosk;
+    private DesiredApplications applications;
     private DesiredLocation location;
 }

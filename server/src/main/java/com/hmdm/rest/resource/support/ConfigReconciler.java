@@ -60,6 +60,10 @@ public class ConfigReconciler {
             if (!AgentCapabilityTokens.isAllowed(DesiredConfigBuilder.CAPABILITY, deviceTokens)) return false;
             DesiredConfig doc = currentDocument(device);
             if (doc == null) return false;
+            String requiredCapability = DesiredConfigBuilder.requiredCapability(doc);
+            // Never let an old config.apply-capable agent acknowledge a revision containing a policy
+            // it silently ignores. It must advertise app.appAllowlist before receiving this document.
+            if (!AgentCapabilityTokens.isAllowed(requiredCapability, deviceTokens)) return false;
             // Steady state (device already applied this revision) must cost only the config + apps
             // selects: skip the command-queue lookups entirely. decide() would return NOOP anyway.
             if (doc.getRevision().equals(appliedRevision)) return false;
@@ -74,7 +78,7 @@ public class ConfigReconciler {
             cmd.setDeviceNumber(number);
             cmd.setType(DesiredConfigBuilder.COMMAND_TYPE);
             cmd.setPayload(DesiredConfigBuilder.toPayloadJson(doc));
-            cmd.setRequiresCapability(DesiredConfigBuilder.CAPABILITY);
+            cmd.setRequiresCapability(requiredCapability);
             cmd.setStatus("pending");
             cmd.setCreatedAt(now);
             commandDAO.insert(cmd);

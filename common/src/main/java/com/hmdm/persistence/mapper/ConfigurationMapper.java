@@ -112,6 +112,8 @@ public interface ConfigurationMapper {
             "contentAppId=#{contentAppId}, " +
             "eventReceivingComponent=#{eventReceivingComponent}, " +
             "kioskMode=#{kioskMode}, " +
+            "appAllowlist=#{appAllowlist}, " +
+            "appAllowlistPackages=#{appAllowlistPackages}, " +
             "wifiSSID=#{wifiSSID}, " +
             "wifiPassword=#{wifiPassword}, " +
             "wifiSecurityType=#{wifiSecurityType}, " +

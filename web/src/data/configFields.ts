@@ -52,6 +52,8 @@ export const CONFIG_FIELDS: FieldDef[] = [
 
   // ── Apps ──────────────────────────────────────────────────────────────────
   { key: 'mainAppId', label: 'Main app', type: 'app', group: 'Apps', focused: true, enforced: true, help: 'Primary app launched on the device (the kiosk app in kiosk mode).' },
+  { key: 'appAllowlist', label: 'Block apps outside this configuration', type: 'switch', group: 'Apps', focused: true, enforced: true, help: 'Hide launchable apps that are not assigned with the Install action. System-critical packages and the MDMesh agent stay available.' },
+  { key: 'appAllowlistPackages', label: 'Additional allowed packages', type: 'textarea', group: 'Apps', focused: true, enforced: true, help: 'Package IDs for allowed system apps that are not in the app library, separated by commas or new lines (for example com.android.settings).' },
   { key: 'contentAppId', label: 'Content app', type: 'app', group: 'Apps', help: 'Optional app used for content delivery.' },
   { key: 'autostartForeground', label: 'Keep apps foreground', type: 'tri', group: 'Apps', help: 'Hold auto-started apps in the foreground.' },
 
@@ -156,5 +158,6 @@ export const ENFORCED_KEYS: ReadonlySet<string> = new Set(ENFORCED_FIELDS.map((f
 /** Changing any of these re-enters/exits kiosk on every device of the configuration. */
 export const KIOSK_AFFECTING_KEYS: ReadonlySet<string> = new Set([
   'kioskMode', 'mainAppId', 'kioskExit', 'kioskHome', 'kioskRecents', 'kioskNotifications', 'kioskSystemInfo',
-  'kioskKeyguard', 'kioskLockButtons', 'password', 'backgroundColor', 'textColor', 'iconSize', 'applications',
+  'kioskKeyguard', 'kioskLockButtons', 'password', 'backgroundColor', 'textColor', 'iconSize',
+  'applications', 'appAllowlist', 'appAllowlistPackages',
 ]);

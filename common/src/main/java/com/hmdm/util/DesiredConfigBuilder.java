@@ -5,6 +5,7 @@ import com.hmdm.persistence.domain.Application;
 import com.hmdm.persistence.domain.Configuration;
 import com.hmdm.persistence.domain.RequestUpdatesType;
 import com.hmdm.rest.json.agent.DesiredConfig;
+import com.hmdm.rest.json.agent.DesiredApplications;
 import com.hmdm.rest.json.agent.DesiredKiosk;
 import com.hmdm.rest.json.agent.DesiredKioskFeatures;
 import com.hmdm.rest.json.agent.DesiredKioskTheme;
@@ -33,6 +34,7 @@ import java.util.TreeSet;
 public final class DesiredConfigBuilder {
     public static final String COMMAND_TYPE = "config.apply";
     public static final String CAPABILITY = "device.configApply";
+    public static final String APP_ALLOWLIST_CAPABILITY = "app.appAllowlist";
     public static final String POLICY_PREFIX = "policies.";
     public static final String KEY_KIOSK = "kiosk";
     public static final String KEY_LOCATION = "location";
@@ -47,11 +49,31 @@ public final class DesiredConfigBuilder {
         d.setConfigurationId(cfg.getId());
         d.setPolicies(policies(cfg));
         d.setKiosk(cfg.isKioskMode() ? kiosk(cfg, apps == null ? Collections.<Application>emptyList() : apps) : null);
+        d.setApplications(applications(cfg, apps == null ? Collections.<Application>emptyList() : apps));
         DesiredLocation loc = new DesiredLocation();
         loc.setMode(cfg.getRequestUpdates() == RequestUpdatesType.GPS ? "active" : "passive");
         d.setLocation(loc);
         d.setRevision(revision(d));
         return d;
+    }
+
+    private static DesiredApplications applications(Configuration cfg, List<Application> apps) {
+        Set<String> allowed = new TreeSet<String>();
+        for (Application app : apps) {
+            if (app == null || app.getAction() != ACTION_INSTALL || app.getPkg() == null) continue;
+            String pkg = app.getPkg().trim();
+            if (!pkg.isEmpty()) allowed.add(pkg);
+        }
+        if (cfg.getAppAllowlistPackages() != null) {
+            for (String value : cfg.getAppAllowlistPackages().split("[,\\s]+")) {
+                String pkg = value.trim();
+                if (!pkg.isEmpty()) allowed.add(pkg);
+            }
+        }
+        DesiredApplications desired = new DesiredApplications();
+        desired.setEnforceAllowlist(cfg.isAppAllowlist());
+        desired.setAllowedPackages(new ArrayList<String>(allowed));
+        return desired;
     }
 
     private static Map<String, Boolean> policies(Configuration cfg) {
@@ -150,5 +172,10 @@ public final class DesiredConfigBuilder {
     public static String toPayloadJson(DesiredConfig doc) {
         try { return PLAIN.writeValueAsString(doc); }
         catch (Exception e) { throw new IllegalStateException(e); }
+    }
+
+    public static String requiredCapability(DesiredConfig doc) {
+        return doc != null && doc.getApplications() != null && doc.getApplications().isEnforceAllowlist()
+                ? APP_ALLOWLIST_CAPABILITY : CAPABILITY;
     }
 }
