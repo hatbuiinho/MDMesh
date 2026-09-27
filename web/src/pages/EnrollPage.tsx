@@ -1,3 +1,4 @@
+import { listAgentReleases, type AgentRelease } from '../api/rollout';
 import { useEffect, useState } from 'react';
 import { AppShell } from '../ui/AppShell';
 import { IconCopy } from '../ui/icons';
@@ -23,6 +24,10 @@ type Mode = 'qr' | 'token';
 
 export function EnrollPage() {
   const toast = useToast();
+  const [agentReleases, setAgentReleases] = useState<AgentRelease[]>([]);
+  const [agentReleaseId, setAgentReleaseId] = useState('');
+  const agentRelease = agentReleases.find((r) => String(r.id) === agentReleaseId);
+  useEffect(() => { listAgentReleases().then(setAgentReleases).catch(() => undefined); }, []);
   const [mode, setMode] = useState<Mode>('qr');
   const [token, setToken] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<number | undefined>();
@@ -111,6 +116,13 @@ export function EnrollPage() {
               </button>
             </div>
             {tokError && <div className="banner banner-alert">{tokError}</div>}
+            {agentReleases.length > 0 && <label className="set-row">
+              <span className="k">Agent APK</span>
+              <select value={agentReleaseId} onChange={(e) => setAgentReleaseId(e.target.value)}>
+                <option value="">Configured APK (existing default)</option>
+                {agentReleases.map((r) => <option key={r.id} value={r.id}>{r.versionName} ({r.versionCode}) · {r.packageName}</option>)}
+              </select>
+            </label>}
             <div className="qr-layout">
               <div>
                 <div className="qr-frame">
@@ -119,6 +131,7 @@ export function EnrollPage() {
                       text={buildProvisioningPayload(
                         token,
                         wifiSsid.trim() ? { ssid: wifiSsid, password: wifiPass, security: wifiSec } : undefined,
+                        agentRelease,
                       )}
                       size={320}
                     />
@@ -180,7 +193,7 @@ export function EnrollPage() {
             </div>
             <p className="note" style={{ padding: '0 20px 16px' }}>
               Server <span className="mono">{serverBaseUrl()}</span> · agent{' '}
-              <span className="mono">{agentApkUrl()}</span>. Host the agent APK at that URL.
+              <span className="mono">{agentRelease?.url ?? agentApkUrl()}</span>. Host the agent APK at that URL.
             </p>
           </section>
         )}

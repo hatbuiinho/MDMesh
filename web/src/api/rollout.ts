@@ -1,61 +1,54 @@
-// Staged agent-APK rollout (canary → fleet). Talks to /private/agent/v1/rollout on the Java server
-// (session-cookie auth via apiClient). Progress counts are derived server-side from each device's
-// reported agentVersion + the app.silentInstall capability gate.
 import { apiClient } from './client';
 
-export interface RolloutCounts {
-  total: number;
-  updated: number;
-  pending: number;
-  outstanding: number;
-  ineligible: number;
+export interface AgentRelease {
+  id: number;
+  packageName: string;
+  versionName: string;
+  versionCode: number;
+  sha256: string;
+  signatureChecksum: string;
+  url: string;
+  createdAt: number;
 }
-
-export interface RolloutProgress {
-  stage: string;
-  targetVersion: string;
-  canary: RolloutCounts;
-  fleet: RolloutCounts | null; // null until the rollout is promoted to fleet
+export type DeviceRolloutStatus = 'updated' | 'pending' | 'waiting' | 'offline' | 'busy' | 'verifying' | 'failed' | 'ineligible' | 'not_started';
+export interface RolloutDevice {
+  deviceNumber: string;
+  agentVersion: string | null;
+  agentVersionCode: number | null;
+  lastSeen: number | null;
+  status: DeviceRolloutStatus;
+  cohort?: 'canary' | 'fleet';
+  detail?: string | null;
+  attempts?: number;
+  identityVerified: boolean;
 }
-
+export type RolloutCounts = Record<Exclude<DeviceRolloutStatus, 'not_started'> | 'total', number>;
 export interface ActiveRollout {
   id: number;
   targetVersion: string;
   packageName: string;
-  apkVersionCode: number | null;
+  apkVersionCode: number;
   stage: 'canary' | 'fleet' | 'done' | 'cancelled';
   createdAt: number;
   updatedAt: number;
-  progress: RolloutProgress;
+  progress: { canary: RolloutCounts; fleet: RolloutCounts | null };
+  devices: RolloutDevice[];
 }
-
 export interface CreateRolloutRequest {
-  targetVersion: string;
-  packageName: string;
-  apkVersionCode: number;
-  apkSha256: string;
+  releaseId: number;
+  allDevices: boolean;
   canaryDeviceNumbers: string[];
-  // apkUrl is built server-side from the deployment's base URL — not sent by the client.
 }
-
 const BASE = '/private/agent/v1/rollout';
-
-/** The current canary/fleet rollout for this customer, or null if none is active. */
-export async function getActiveRollout(): Promise<ActiveRollout | null> {
-  return apiClient.get<ActiveRollout | null>(`${BASE}/active`);
+export const listAgentReleases = () => apiClient.get<AgentRelease[]>('/private/agent/v1/releases');
+export function uploadAgentRelease(file: File): Promise<AgentRelease> {
+  const form = new FormData(); form.append('file', file);
+  return apiClient.postForm('/private/agent/v1/releases', form);
 }
-
-/** Start a canary-stage rollout. Throws ApiError (e.g. a rollout is already active). */
-export async function createRollout(req: CreateRolloutRequest): Promise<ActiveRollout> {
-  return apiClient.post<ActiveRollout>(BASE, req);
-}
-
-/** Advance a canary rollout to the rest of the fleet. */
-export async function promoteRollout(id: number): Promise<ActiveRollout> {
-  return apiClient.post<ActiveRollout>(`${BASE}/${id}/promote`);
-}
-
-/** Stop offering the update (in-flight installs run their course). */
-export async function cancelRollout(id: number): Promise<void> {
-  await apiClient.post<void>(`${BASE}/${id}/cancel`);
-}
+export const previewRollout = (id: number) => apiClient.get<RolloutDevice[]>(`${BASE}/preview/${id}`);
+export const getActiveRollout = () => apiClient.get<ActiveRollout | null>(`${BASE}/active`);
+export const createRollout = (req: CreateRolloutRequest) => apiClient.post<ActiveRollout>(BASE, req);
+export const promoteRollout = (id: number) => apiClient.post<ActiveRollout>(`${BASE}/${id}/promote`);
+export const retryRolloutDevice = (id: number, deviceNumber: string) => apiClient.post<ActiveRollout>(`${BASE}/${id}/retry`, { deviceNumber });
+export const cancelRollout = (id: number) => apiClient.post<void>(`${BASE}/${id}/cancel`);
+export const finishRollout = (id: number) => apiClient.post<void>(`${BASE}/${id}/finish`);

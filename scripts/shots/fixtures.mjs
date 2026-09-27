@@ -92,11 +92,12 @@ export function buildFixtures(now = Date.now()) {
   };
 
   const activeRollout = {
-    id: 7, targetVersion: '0.1.15', packageName: 'com.lunacy.mdm.agent', apkVersionCode: 16,
+    devices: devices.slice(0, 4).map((d, i) => ({ deviceNumber: d.number, agentVersion: i < 2 ? '0.1.15' : '0.1.14', agentVersionCode: i < 2 ? 16 : 15, lastSeen: now - min, status: i < 2 ? 'updated' : i === 2 ? 'pending' : 'offline', cohort: 'canary', identityVerified: true })),
+    id: 7, targetVersion: '0.1.15', packageName: 'com.mdmesh.agent', apkVersionCode: 16,
     stage: 'canary', createdAt: now - 20 * min, updatedAt: now - 2 * min,
     progress: {
       stage: 'canary', targetVersion: '0.1.15',
-      canary: { total: 4, updated: 2, pending: 1, outstanding: 1, ineligible: 0 },
+      canary: { total: 4, updated: 2, pending: 1, waiting: 0, offline: 1, busy: 0, verifying: 0, failed: 0, ineligible: 0 },
       fleet: null,
     },
   };

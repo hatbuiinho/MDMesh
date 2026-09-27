@@ -65,7 +65,8 @@ public interface AgentCommandMapper {
      */
     @Update({"UPDATE agentCommand SET status = #{status}, detail = #{detail}, completedAt = #{completedAt} " +
             "WHERE id = #{id} AND deviceNumber = #{deviceNumber} " +
-            "AND status NOT IN ('done','failed','unsupported')"})
+            "AND status NOT IN ('done','failed','unsupported','cancelled') " +
+            "AND (#{status} <> 'accepted' OR status IN ('delivered','accepted'))"})
     void markResultWithTime(@Param("deviceNumber") String deviceNumber, @Param("id") Integer id,
                             @Param("status") String status, @Param("detail") String detail,
                             @Param("completedAt") Long completedAt);
@@ -78,7 +79,7 @@ public interface AgentCommandMapper {
     @Update({"UPDATE agentCommand SET status = 'expired', completedAt = #{now} " +
             "WHERE deviceNumber = #{deviceNumber} AND (" +
             "(status = 'pending' AND createdAt < #{pendingCutoff}) OR " +
-            "(status = 'delivered' AND deliveredAt IS NOT NULL AND deliveredAt < #{deliveredCutoff}))"})
+            "(status IN ('delivered','accepted') AND deliveredAt IS NOT NULL AND deliveredAt < #{deliveredCutoff}))"})
     void expireStale(@Param("deviceNumber") String deviceNumber, @Param("pendingCutoff") long pendingCutoff,
                      @Param("deliveredCutoff") long deliveredCutoff, @Param("now") long now);
 
@@ -87,7 +88,7 @@ public interface AgentCommandMapper {
     List<AgentCommand> listHistory(@Param("deviceNumber") String deviceNumber,
                                    @Param("since") long since, @Param("limit") int limit);
 
-    @Select({"SELECT COUNT(*) FROM agentCommand WHERE deviceNumber = #{deviceNumber} AND type = #{type} AND status IN ('pending','delivered')"})
+    @Select({"SELECT COUNT(*) FROM agentCommand WHERE deviceNumber = #{deviceNumber} AND type = #{type} AND status IN ('pending','delivered','accepted')"})
     int countOpenOfType(@Param("deviceNumber") String deviceNumber, @Param("type") String type);
 
     @Select({"SELECT * FROM agentCommand WHERE deviceNumber = #{deviceNumber} AND type = #{type} ORDER BY id DESC LIMIT 1"})

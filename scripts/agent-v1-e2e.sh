@@ -215,7 +215,7 @@ chk "observer: mint enrollment token denied" "$(curl -s -b "$OJ" -X POST -H 'Con
 chk "observer: syncApps denied" "$(curl -s -b "$OJ" -X POST "$BASE/rest/private/agent/v1/devices/$DID/syncApps" | ores)" "$DENIED"
 chk "observer: force sync denied" "$(curl -s -b "$OJ" -X POST "$BASE/rest/private/agent/v1/devices/$DID/sync" | ores)" "$DENIED"
 ROUT=$(curl -s -b "$OJ" -X POST -H 'Content-Type: application/json' \
-  -d "{\"targetVersion\":\"9.9.9-e2e\",\"packageName\":\"com.mdmesh.agent\",\"apkVersionCode\":999999,\"apkSha256\":\"$(printf '0%.0s' $(seq 64))\",\"canaryDeviceNumbers\":[\"$DID\"]}" \
+  -d "{\"releaseId\":1,\"canaryDeviceNumbers\":[\"$DID\"]}" \
   "$BASE/rest/private/agent/v1/rollout")
 chk "observer: rollout create denied" "$(echo "$ROUT" | ores)" "$DENIED"
 # Should the create ever get through (regression), do not leave an active rollout behind.
@@ -224,9 +224,10 @@ RID=$(echo "$ROUT" | field "(d.get('data') or {}).get('id') or ''")
 # A REAL rollout (admin-created) — the Observer may read it but neither promote nor cancel it. The canary is the
 # e2e device, which advertises no app.silentInstall, so nothing is queued. Skipped rather than touching a live
 # rollout if the server already has one (one active rollout per customer).
-if [ "$(curl -s -b "$CJ" "$BASE/rest/private/agent/v1/rollout/active" | field "d['data'] is None")" = True ]; then
+TEST_RELEASE_ID=$(curl -s -b "$CJ" "$BASE/rest/private/agent/v1/releases" | field "(d.get('data') or [{}])[0].get('id', '')")
+if [ -n "$TEST_RELEASE_ID" ] && [ "$(curl -s -b "$CJ" "$BASE/rest/private/agent/v1/rollout/active" | field "d['data'] is None")" = True ]; then
   AROUT=$(curl -s -b "$CJ" -X POST -H 'Content-Type: application/json' \
-    -d "{\"targetVersion\":\"9.9.8-e2e\",\"packageName\":\"com.mdmesh.agent\",\"apkVersionCode\":999998,\"apkSha256\":\"$(printf '0%.0s' $(seq 64))\",\"canaryDeviceNumbers\":[\"$DID\"]}" \
+    -d "{\"releaseId\":$TEST_RELEASE_ID,\"canaryDeviceNumbers\":[\"$DID\"]}" \
     "$BASE/rest/private/agent/v1/rollout")
   LIVE_RID=$(echo "$AROUT" | field "(d.get('data') or {}).get('id') or ''")
   chk "admin: rollout created (canary)" "$(echo "$AROUT" | field "str(d['status'])+':'+str((d.get('data') or {}).get('stage'))")" "OK:canary"
@@ -237,7 +238,7 @@ if [ "$(curl -s -b "$CJ" "$BASE/rest/private/agent/v1/rollout/active" | field "d
   LIVE_RID=""
   chk "no active rollout left" "$(curl -s -b "$CJ" "$BASE/rest/private/agent/v1/rollout/active" | field "d['data'] is None")" "True"
 else
-  echo "  SKIP: observer promote/cancel on a real rollout (this server already has an active rollout)"
+  echo "  SKIP: observer promote/cancel on a real rollout (no registered agent release, or an active rollout already exists)"
 fi
 chk "observer: command history readable" "$(curl -s -b "$OJ" "$BASE/rest/private/agent/v1/devices/$DID/commands?since=0" | field "d['status']")" "OK"
 chk "observer: device state readable" "$(curl -s -b "$OJ" "$BASE/rest/private/agent/v1/devices/$DID/state" | field "str(d['status'])+':'+str(d['data']['battery'])")" "OK:77"

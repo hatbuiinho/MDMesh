@@ -96,7 +96,7 @@ async function main() {
     { name: 'device-detail', route: '/devices/101' },
     { name: 'apps', route: '/apps' },
     // The staged-rollout panel lives down the Settings page — capture it as a focused card.
-    { name: 'rollout', route: '/settings', element: 'section.panel:has(h2:has-text("Agent rollout"))' },
+    { name: 'rollout', route: '/settings', element: 'section.panel:has(h2:has-text("Agent releases & rollout"))' },
   ];
 
   for (const s of shots) {

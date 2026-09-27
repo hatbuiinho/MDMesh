@@ -77,3 +77,14 @@ is re-posted every check-in (cheap, keeps the token set fresh as the OS/agent ch
 - `/checkin` is authenticated by a per-device secret (`Authorization: Bearer <deviceSecret>`),
   minted at `/enroll`, stored server-side only as a SHA-256 hash, verified before any state
   change. Bare `deviceId` is not sufficient — this prevents IDOR / device spoofing.
+
+
+### Agent release identity (optional check-in state fields)
+
+The `state` snapshot can include `agentVersion` (versionName), `agentVersionCode`
+(positive integer), `agentPackageName` and `agentSignatureChecksum` (SHA-256 of the
+current signing certificate, URL-safe Base64 without padding). Older agents may omit
+these fields. The Android agent reads them from its installed package, including after
+a self-update. The control plane uses versionCode and identity to reconcile durable
+rollouts; a reported version at or above the target completes the rollout command.
+When versionCode is absent, the transitional progress check uses exact versionName.

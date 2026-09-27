@@ -27,6 +27,39 @@ import java.io.Serializable;
 public class RolloutDeviceRow implements Serializable {
     private static final long serialVersionUID = 1L;
 
+    private Long agentVersionCode;
+    public Long getAgentVersionCode() { return agentVersionCode; }
+    public void setAgentVersionCode(Long v) { agentVersionCode = v; }
+    private String agentSignatureChecksum;
+    public String getAgentSignatureChecksum() { return agentSignatureChecksum; }
+    public void setAgentSignatureChecksum(String v) { agentSignatureChecksum = v; }
+    private String agentPackageName;
+    public String getAgentPackageName() { return agentPackageName; }
+    public void setAgentPackageName(String v) { agentPackageName = v; }
+    private Long lastSeen;
+    public Long getLastSeen() { return lastSeen; }
+    public void setLastSeen(Long v) { lastSeen = v; }
+    private String commandStatus;
+    public String getCommandStatus() { return commandStatus; }
+    public void setCommandStatus(String v) { commandStatus = v; }
+    private String commandDetail;
+    public String getCommandDetail() { return commandDetail; }
+    public void setCommandDetail(String v) { commandDetail = v; }
+    private Long commandCreatedAt;
+    public Long getCommandCreatedAt() { return commandCreatedAt; }
+    public void setCommandCreatedAt(Long v) { commandCreatedAt = v; }
+    private Long commandCompletedAt;
+    public Long getCommandCompletedAt() { return commandCompletedAt; }
+    public void setCommandCompletedAt(Long v) { commandCompletedAt = v; }
+    private Integer attempts;
+    public Integer getAttempts() { return attempts; }
+    public void setAttempts(Integer v) { attempts = v; }
+    private Boolean busy;
+    public Boolean getBusy() { return busy; }
+    public void setBusy(Boolean v) { busy = v; }
+    private Boolean canary;
+    public Boolean getCanary() { return canary; }
+    public void setCanary(Boolean v) { canary = v; }
     private String deviceNumber;
     private String agentVersion;
     private String capabilitiesJson;

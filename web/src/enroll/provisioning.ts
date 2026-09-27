@@ -1,3 +1,5 @@
+import type { AgentRelease } from '../api/rollout';
+
 // Builds the Android QR provisioning payload for the MDMesh agent. Crucially it carries the
 // SERVER_URL extra, so one prebuilt APK works for any deployment (the agent reads it at enrollment).
 //
@@ -35,11 +37,11 @@ export interface WifiConfig {
 }
 
 /** The provisioning JSON a fresh device scans (6-tap → QR scanner). Pass `wifi` to pre-connect it. */
-export function buildProvisioningPayload(token: string, wifi?: WifiConfig): string {
+export function buildProvisioningPayload(token: string, wifi?: WifiConfig, release?: AgentRelease): string {
   const payload: Record<string, unknown> = {
-    'android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME': ADMIN_COMPONENT,
-    'android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM': SIGNATURE_CHECKSUM,
-    'android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION': agentApkUrl(),
+    'android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME': release ? `${release.packageName}/com.mdmesh.agent.admin.AdminReceiver` : ADMIN_COMPONENT,
+    'android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM': release?.signatureChecksum ?? SIGNATURE_CHECKSUM,
+    'android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION': release?.url ?? agentApkUrl(),
     'android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE': {
       'com.mdmesh.ENROLL_TOKEN': token,
       'com.mdmesh.SERVER_URL': serverBaseUrl(),

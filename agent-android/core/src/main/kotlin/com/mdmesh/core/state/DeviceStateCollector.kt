@@ -38,6 +38,12 @@ class DeviceStateCollector @Inject constructor(
             androidRelease = Build.VERSION.RELEASE ?: "",
             lastBootAt = System.currentTimeMillis() - SystemClock.elapsedRealtime(),
             agentVersion = installedVersionName(),
+            agentVersionCode = runCatching {
+                val info = context.packageManager.getPackageInfo(context.packageName, 0)
+                if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
+            }.getOrNull(),
+            agentSignatureChecksum = installedSignatureChecksum(),
+            agentPackageName = context.packageName,
             powerMode = powerModeStore.get(),
             appliedConfigRevision = configStateStore.revision(),
         )
@@ -46,6 +52,20 @@ class DeviceStateCollector @Inject constructor(
     /** The actually-installed agent versionName (read from PackageManager — accurate after self-update). */
     private fun installedVersionName(): String? = runCatching {
         context.packageManager.getPackageInfo(context.packageName, 0).versionName
+    }.getOrNull()
+
+    @Suppress("DEPRECATION")
+    private fun installedSignatureChecksum(): String? = runCatching {
+        val pm = context.packageManager
+        val signatures = if (Build.VERSION.SDK_INT >= 28) {
+            pm.getPackageInfo(context.packageName, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+                .signingInfo?.apkContentsSigners
+        } else {
+            pm.getPackageInfo(context.packageName, android.content.pm.PackageManager.GET_SIGNATURES).signatures
+        }
+        val cert = signatures?.singleOrNull() ?: return@runCatching null
+        android.util.Base64.encodeToString(java.security.MessageDigest.getInstance("SHA-256").digest(cert.toByteArray()),
+            android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING)
     }.getOrNull()
 
     companion object {

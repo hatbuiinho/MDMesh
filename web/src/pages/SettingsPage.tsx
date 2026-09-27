@@ -171,7 +171,7 @@ export function SettingsPage() {
         {upd && (
           <section className="panel">
             <div className="panel-head">
-              <h2 className="panel-title">Updates</h2>
+              <h2 className="panel-title">Server & console updates</h2>
             </div>
             <div className="set-row">
               <span className="k">Running version</span>
@@ -207,8 +207,8 @@ export function SettingsPage() {
                   Apply this release
                   <small>
                     {upd.applySupported === false
-                      ? 'Agent APK rolls out to devices; server + console update via the installer.'
-                      : 'Server + console update now; agent APK rolls out to devices.'}
+                      ? 'Update the server and console using your deployment configuration.'
+                      : 'Update the server and console. Manage device APKs in Agent releases below.'}
                   </small>
                 </span>
                 <span className="v">
@@ -223,7 +223,7 @@ export function SettingsPage() {
                       </button>
                     )}
                     <button className="btn btn-sm" onClick={scrollToRollout}>
-                      Roll out agent to devices ↓
+                      Manage agent releases ↓
                     </button>
                   </div>
                   {upd.applySupported === false && (
@@ -258,7 +258,7 @@ export function SettingsPage() {
             {upd.applySupported !== false && (
             <div className="set-row auto-update-row">
               <span className="k">
-                Automatic updates
+                Automatic server updates
                 <small>Apply verified releases without a prompt.</small>
                 <p className="au-note">
                   When on, the updater applies each verified release on its own — backing up the

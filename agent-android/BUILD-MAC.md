@@ -42,3 +42,7 @@ trong `web-build.env`. Chỉ restart web image upstream không cập nhật QR.
 URL mặc định là `https://mdm.hatbuinho.me/files/mdmesh-custom.apk`, có thể đổi
 bằng `MDM_APK_URL`. `/files/agent.apk` hiện trỏ tới mirror upstream nên không
 dùng đường dẫn đó cho APK riêng nếu chưa sửa routing.
+
+Sau khi nâng cấp control plane có danh mục agent release, các bản tiếp theo có thể
+upload trực tiếp tại **Settings → Agent releases & rollout**; không cần đổi mount APK
+hay build lại web. Xem [quy trình rollout toàn bộ thiết bị](../docs/agent-rollout.md).

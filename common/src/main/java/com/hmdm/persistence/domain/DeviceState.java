@@ -13,6 +13,15 @@ public class DeviceState implements Serializable {
     private String androidRelease;
     private Long lastBootAt;
     private Long updatedAt;
+    private Long agentVersionCode;
+    public Long getAgentVersionCode() { return agentVersionCode; }
+    public void setAgentVersionCode(Long v) { agentVersionCode = v; }
+    private String agentSignatureChecksum;
+    public String getAgentSignatureChecksum() { return agentSignatureChecksum; }
+    public void setAgentSignatureChecksum(String v) { agentSignatureChecksum = v; }
+    private String agentPackageName;
+    public String getAgentPackageName() { return agentPackageName; }
+    public void setAgentPackageName(String v) { agentPackageName = v; }
     private String agentVersion;
     private String powerMode;
     private String telemetry;

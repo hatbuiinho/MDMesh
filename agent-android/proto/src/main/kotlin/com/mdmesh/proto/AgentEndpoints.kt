@@ -66,6 +66,9 @@ data class AgentDeviceStateDto(
     val lastBootAt: Long,
     /** Installed agent versionName, e.g. "0.1.4". Null on older agents that don't report it. */
     val agentVersion: String? = null,
+    val agentVersionCode: Long? = null,
+    val agentSignatureChecksum: String? = null,
+    val agentPackageName: String? = null,
     /** Current connectivity power mode ("adaptive" | "alwaysOn"). */
     val powerMode: String? = null,
     /** Revision of the last desired-state document the agent fully applied; null until the first successful config.apply. */

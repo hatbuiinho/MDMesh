@@ -88,6 +88,7 @@ public class AgentResource {
     private static final int MAX_EVENT_DETAIL_CHARS = 4000;
     private static final int MAX_TELEMETRY_CHARS = 256 * 1024;
 
+    private com.hmdm.persistence.AgentRolloutCoordinator rolloutCoordinator;
     private UnsecureDAO unsecureDAO;
     private AgentEnrollmentTokenDAO tokenDAO;
     private AgentCommandDAO commandDAO;
@@ -105,12 +106,14 @@ public class AgentResource {
                          AgentEnrollmentTokenDAO tokenDAO,
                          AgentCommandDAO commandDAO,
                          com.hmdm.rest.resource.support.ConfigAppInstaller configAppInstaller,
-                         com.hmdm.rest.resource.support.ConfigReconciler configReconciler) {
+                         com.hmdm.rest.resource.support.ConfigReconciler configReconciler,
+                         com.hmdm.persistence.AgentRolloutCoordinator rolloutCoordinator) {
         this.unsecureDAO = unsecureDAO;
         this.tokenDAO = tokenDAO;
         this.commandDAO = commandDAO;
         this.configAppInstaller = configAppInstaller;
         this.configReconciler = configReconciler;
+        this.rolloutCoordinator = rolloutCoordinator;
     }
 
     // =================================================================================================================
@@ -264,6 +267,9 @@ public class AgentResource {
             row.setAndroidRelease(s.getAndroidRelease());
             row.setLastBootAt(s.getLastBootAt());
             row.setAgentVersion(s.getAgentVersion());
+            row.setAgentVersionCode(s.getAgentVersionCode());
+            row.setAgentSignatureChecksum(s.getAgentSignatureChecksum());
+            row.setAgentPackageName(s.getAgentPackageName());
             row.setPowerMode(s.getPowerMode());
             row.setAppliedConfigRevision(appliedRevision);
             row.setAppliedConfigAt(null);
@@ -341,6 +347,10 @@ public class AgentResource {
         // leash (6 h): the device HAS them — a slow install on metered network must not be
         // expired out from under its own genuine result.
         commandDAO.expireStale(deviceNumber, 60L * 60L * 1000L, 6L * 60L * 60L * 1000L);
+        // Durable rollout intent survives command expiry and offline devices. Reconcile AFTER state
+        // and results are persisted, BEFORE claiming commands; a successful self-update stops here.
+        rolloutCoordinator.reconcile(device.getCustomerId(), deviceNumber);
+
 
         // Gate pending commands by capability-token set membership, reusing the matrix this very
         // request carried (fall back to the stored copy only when the agent omitted it).

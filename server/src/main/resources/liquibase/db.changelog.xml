@@ -2850,4 +2850,43 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="26.09.27-agent-releases-rollout" author="mdmesh" context="common">
+        <sql>
+            CREATE TABLE agentRelease (
+                id SERIAL PRIMARY KEY, customerId INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+                packageName VARCHAR(255) NOT NULL, versionName VARCHAR(255) NOT NULL,
+                versionCode INT NOT NULL CHECK (versionCode &gt; 0), sha256 VARCHAR(64) NOT NULL,
+                signatureChecksum VARCHAR(64) NOT NULL, filePath VARCHAR(512) NOT NULL,
+                createdAt BIGINT NOT NULL, UNIQUE(customerId, packageName, versionCode)
+            );
+            ALTER TABLE agentRollout ADD COLUMN apkSignatureChecksum VARCHAR(64);
+            CREATE TABLE agentRolloutTarget (
+                rolloutId INT NOT NULL REFERENCES agentRollout(id) ON DELETE CASCADE,
+                deviceNumber VARCHAR(255) NOT NULL, retryAfterCommandId INT NOT NULL DEFAULT 0,
+                PRIMARY KEY (rolloutId, deviceNumber)
+            );
+            INSERT INTO agentRolloutTarget(rolloutId, deviceNumber)
+                SELECT r.id, d.number FROM agentRollout r JOIN devices d ON d.customerId = r.customerId
+                WHERE r.stage IN ('canary','fleet');
+            ALTER TABLE agentCommand ADD COLUMN rolloutId INT REFERENCES agentRollout(id);
+            CREATE INDEX ix_agentCommand_rollout ON agentCommand(rolloutId, deviceNumber, id);
+            CREATE UNIQUE INDEX uq_agentCommand_rollout_open ON agentCommand(rolloutId, deviceNumber)
+                WHERE rolloutId IS NOT NULL AND status IN ('pending','delivered','accepted');
+            ALTER TABLE device_state ADD COLUMN agentVersionCode BIGINT;
+            ALTER TABLE device_state ADD COLUMN agentSignatureChecksum VARCHAR(64);
+            ALTER TABLE device_state ADD COLUMN agentPackageName VARCHAR(255);
+        </sql>
+        <rollback>
+            ALTER TABLE device_state DROP COLUMN agentPackageName;
+            ALTER TABLE device_state DROP COLUMN agentSignatureChecksum;
+            ALTER TABLE device_state DROP COLUMN agentVersionCode;
+            DROP INDEX uq_agentCommand_rollout_open;
+            DROP INDEX ix_agentCommand_rollout;
+            ALTER TABLE agentCommand DROP COLUMN rolloutId;
+            DROP TABLE agentRolloutTarget;
+            DROP TABLE agentRelease;
+            ALTER TABLE agentRollout DROP COLUMN apkSignatureChecksum;
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

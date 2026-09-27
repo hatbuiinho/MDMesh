@@ -32,11 +32,15 @@ class AppInventoryCollector(private val context: Context) {
                 0,
             ).mapNotNull { it.activityInfo?.packageName }.toSet()
         }.getOrDefault(emptySet())
-        // Only launchable apps are useful for kiosk, so skip everything else entirely — we never
-        // label or emit the ~hundreds of non-launchable system packages, which keeps the result
-        // small and the scan fast. getInstalledPackages gives version + ApplicationInfo in one call.
+        // The same inventory also drives uninstall. Include non-launchable user apps; keep
+        // non-launchable system components out so the response remains small and usable.
         return pm.getInstalledPackages(0).asSequence()
-            .filter { it.packageName in launchable }
+            .filter { pi ->
+                val ai = pi.applicationInfo
+                val system = ai != null && ((ai.flags and ApplicationInfo.FLAG_SYSTEM) != 0 ||
+                    (ai.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0)
+                !system || pi.packageName in launchable
+            }
             .mapNotNull { pi ->
                 runCatching {
                     val ai = pi.applicationInfo
@@ -48,7 +52,7 @@ class AppInventoryCollector(private val context: Context) {
                         pkg = pi.packageName,
                         label = ai?.let { runCatching { pm.getApplicationLabel(it).toString() }.getOrNull() } ?: pi.packageName,
                         system = system,
-                        launchable = true,
+                        launchable = pi.packageName in launchable,
                         versionName = pi.versionName,
                         versionCode = code,
                     )

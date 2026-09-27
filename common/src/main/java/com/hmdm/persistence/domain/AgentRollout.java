@@ -32,6 +32,9 @@ public class AgentRollout implements Serializable {
     private String targetVersion;
     private String packageName;
     private String apkUrl;
+    private String apkSignatureChecksum;
+    public String getApkSignatureChecksum() { return apkSignatureChecksum; }
+    public void setApkSignatureChecksum(String v) { apkSignatureChecksum = v; }
     private String apkSha256;
     private Integer apkVersionCode;
     private String stage;       // canary | fleet | done | cancelled

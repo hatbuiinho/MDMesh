@@ -47,6 +47,7 @@ import org.slf4j.LoggerFactory;
 @Singleton
 public class DownloadFilesServlet extends HttpServlet {
     private final ApplicationDAO applicationDAO;
+    private final com.hmdm.persistence.AgentReleaseDAO agentReleaseDAO;
     private final String filesDirectory;
     private final File baseDirectory;
     private final PublicIPFilter publicIPFilter;
@@ -61,11 +62,13 @@ public class DownloadFilesServlet extends HttpServlet {
 
     @Inject
     public DownloadFilesServlet(ApplicationDAO applicationDAO,
+                                com.hmdm.persistence.AgentReleaseDAO agentReleaseDAO,
                                 PublicIPFilter publicIPFilter,
                                 @Named("files.directory") String filesDirectory,
                                 @Named("secure.enrollment") boolean secureEnrollment,
                                 @Named("hash.secret") String hashSecret) {
         this.applicationDAO = applicationDAO;
+        this.agentReleaseDAO = agentReleaseDAO;
         this.filesDirectory = filesDirectory;
         this.baseDirectory = new File(filesDirectory);
         this.publicIPFilter = publicIPFilter;
@@ -88,7 +91,10 @@ public class DownloadFilesServlet extends HttpServlet {
             return;
         }
 
-        if (secureEnrollment && !applicationDAO.isMainApp("%" + path)) {
+        // Like the main provisioning APK, verified catalog releases must be downloadable before
+        // enrollment (QR) and by the agent's APK downloader, which has no console session.
+        boolean agentRelease = agentReleaseDAO.isPublishedPath(path);
+        if (secureEnrollment && !agentRelease && !applicationDAO.isMainApp("%" + path)) {
             String signature = req.getHeader(HEADER_ENROLLMENT_SIGNATURE);
             if (signature == null) {
                 log.warn("No signature for file request " + req.getRequestURL().toString());

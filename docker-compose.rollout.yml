@@ -1,0 +1,17 @@
+# Local control-plane build with the agent release catalog and durable rollouts.
+# Apply after the deployment's base compose file and docker-compose.agent.yml.
+services:
+  server:
+    image: mdmesh-server:agent-rollout
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+  caddy:
+    image: mdmesh-web:agent-rollout
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+  supervisor:
+    environment:
+      APPLY_SUPPORTED: "0"
+      AUTO_UPDATE: "0"
