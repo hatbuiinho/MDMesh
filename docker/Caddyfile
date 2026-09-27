@@ -16,6 +16,14 @@
 {$SITE_ADDRESS} {
 	encode gzip
 
+	# Private signed builds mounted by docker-compose.agent.yml.
+	handle /files/mdmesh-custom.apk {
+		root * /srv-agent
+		rewrite * /mdmesh-custom.apk
+		header Cache-Control "no-cache"
+		file_server
+	}
+
 	# Canonical agent-APK URL: /files/agent.apk works on BOTH deployment shapes (native serves a
 	# real file from Tomcat; here it's the supervisor's sha256-verified release mirror — the same
 	# upstream as /update/agent.apk, which stays below for back-compat). The exact-path matcher
@@ -30,7 +38,7 @@
 	# upgrades WebSockets automatically, so /agent/ws works without extra config.
 	@backend path /rest/* /files/* /agent/ws/*
 	handle @backend {
-		reverse_proxy server:8080
+		reverse_proxy {$MDM_SERVER_UPSTREAM:server:8080}
 	}
 
 	# Updater status + recovery page → the decoupled supervisor (always up, independent of the

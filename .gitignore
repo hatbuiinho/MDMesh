@@ -41,6 +41,7 @@ agent-android/.gradle/
 agent-android/**/build/
 agent-android/local.properties
 agent-android/.kotlin/
+releases/
 *.apk
 *.aab
 *.keystore

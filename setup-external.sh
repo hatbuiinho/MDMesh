@@ -77,7 +77,7 @@ fi
 
 set -a; . ./.env; set +a
 HOST=${BASE_URL#*://}; HOST=${HOST%%/*}
-COMPOSE=(docker compose -f "$COMPOSE_FILE_PATH")
+COMPOSE=(docker compose)
 
 docker network inspect "$EXTERNAL_NETWORK" >/dev/null 2>&1 || {
   err "External Docker network '$EXTERNAL_NETWORK' does not exist."; exit 1;
@@ -90,7 +90,12 @@ say "Checking external PostgreSQL connection..."
 mdm_psql -c 'SELECT 1' >/dev/null || { err "Cannot connect to ${DB_HOST}:${DB_PORT}/${DB_NAME}."; exit 1; }
 
 say "Preparing MDMesh images..."
-"${COMPOSE[@]}" pull server caddy
+if [[ ":${COMPOSE_FILE:-}:" == *":docker-compose.agent.yml:"* ]]; then
+  "${COMPOSE[@]}" pull server
+  "${COMPOSE[@]}" build caddy
+else
+  "${COMPOSE[@]}" pull server caddy
+fi
 "${COMPOSE[@]}" build supervisor
 say "Starting MDMesh..."
 "${COMPOSE[@]}" up -d server supervisor caddy

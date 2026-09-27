@@ -1,0 +1,19 @@
+# Custom signed agent: local web image + read-only APK mount.
+services:
+  caddy:
+    image: mdmesh-web:agent-1000
+    environment:
+      MDM_SERVER_UPSTREAM: mdmesh-server-1:8080
+    build:
+      args:
+        VITE_AGENT_PACKAGE: com.mdmesh.agent
+        VITE_AGENT_CHECKSUM: xFUN6uzA1wIgTFKvl4J6wPdf0DJeX3kNaS27ucdo1V4
+        VITE_AGENT_APK_URL: https://mdm.hatbuinho.me/files/mdmesh-custom.apk
+    volumes:
+      - ./releases/android/1000/mdmesh-custom.apk:/srv-agent/mdmesh-custom.apk:ro
+  supervisor:
+    environment:
+      APPLY_SUPPORTED: "0"
+      AUTO_UPDATE: "0"
+      SERVER_BASE: http://mdmesh-server-1:8080
+      HEALTH_URL: http://mdmesh-server-1:8080/rest/public/name
