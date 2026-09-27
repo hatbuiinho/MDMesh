@@ -32,7 +32,8 @@ class ConfigReapplyWorker @AssistedInject constructor(
         private const val TAG = "ConfigReapplyWorker"
         fun scheduleNow(context: Context) {
             WorkManager.getInstance(context).enqueueUniqueWork(
-                "config-reapply", ExistingWorkPolicy.KEEP, OneTimeWorkRequestBuilder<ConfigReapplyWorker>().build(),
+                // A package broadcast must not be discarded behind an older queued reconciliation.
+                "config-reapply", ExistingWorkPolicy.REPLACE, OneTimeWorkRequestBuilder<ConfigReapplyWorker>().build(),
             )
         }
     }

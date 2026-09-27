@@ -56,7 +56,7 @@ public interface RolloutMapper {
     @Select({"SELECT deviceNumber FROM agentRolloutCanary WHERE rolloutId = #{rolloutId}"})
     List<String> listCanaryNumbers(@Param("rolloutId") int rolloutId);
 
-    @Select({"SELECT d.number AS deviceNumber, s.agentVersion AS agentVersion, s.agentVersionCode, s.agentSignatureChecksum, s.agentPackageName, s.updatedAt AS lastSeen, d.agentCapabilities AS capabilitiesJson " +
+    @Select({"SELECT d.number AS deviceNumber, d.description, s.agentVersion AS agentVersion, s.agentVersionCode, s.agentSignatureChecksum, s.agentPackageName, s.updatedAt AS lastSeen, d.agentCapabilities AS capabilitiesJson " +
             "FROM devices d LEFT JOIN device_state s ON s.deviceNumber = d.number WHERE d.customerId = #{customerId}"})
     List<RolloutDeviceRow> listCustomerDevices(@Param("customerId") int customerId);
 
@@ -68,7 +68,7 @@ public interface RolloutMapper {
             "SELECT #{id}, number FROM devices WHERE customerId = #{customerId}")
     void snapshotTargets(@Param("id") int id, @Param("customerId") int customerId);
 
-    String TARGET_ROWS = "SELECT d.number AS deviceNumber, s.agentVersion, s.agentVersionCode, " +
+    String TARGET_ROWS = "SELECT d.number AS deviceNumber, d.description, s.agentVersion, s.agentVersionCode, " +
             "s.agentSignatureChecksum, s.agentPackageName, s.updatedAt AS lastSeen, d.agentCapabilities AS capabilitiesJson, " +
             "c.status AS commandStatus, c.detail AS commandDetail, c.createdAt AS commandCreatedAt, c.completedAt AS commandCompletedAt, " +
             "EXISTS(SELECT 1 FROM agentRolloutCanary ca WHERE ca.rolloutId = t.rolloutId AND ca.deviceNumber = d.number) AS canary, " +

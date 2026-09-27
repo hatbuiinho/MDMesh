@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AppShell } from '../ui/AppShell';
 import { useDevices } from '../data/useDevices';
 import { statusMeta, isOnline as isOnlineByRecency } from '../ui/status';
-import { fmtRelative, orDash } from '../ui/format';
+import { deviceDisplayName, deviceSecondaryId, fmtRelative } from '../ui/format';
 import { getEvents, type DeviceEvent } from '../api/events';
 import type { DeviceView, ConfigurationLookup } from '../api/devices';
 
@@ -247,12 +247,12 @@ export function DashboardPage() {
                   </span>
                   <div className="feed-tx">
                     <span>
-                      <b>{orDash(a.device.number)}</b>{' '}
+                      <b>{deviceDisplayName(a.device)}</b>{' '}
                       {EVENT_VERBS[a.ev.type] ?? a.ev.type}
                     </span>
-                    {(a.device.description || a.ev.detail) && (
+                    {(deviceSecondaryId(a.device) || a.ev.detail) && (
                       <div className="feed-sub">
-                        {a.ev.detail || a.device.description}
+                        {deviceSecondaryId(a.device)}{deviceSecondaryId(a.device) && a.ev.detail ? ' · ' : ''}{a.ev.detail}
                       </div>
                     )}
                   </div>
@@ -293,7 +293,7 @@ export function DashboardPage() {
                       }
                     >
                       <span className={`dot dot-${m.tone}`} />
-                      <span className="att-nm">{orDash(d.number)}</span>
+                      <span className="att-nm"><b>{deviceDisplayName(d)}</b>{deviceSecondaryId(d) && <small className="mono">{deviceSecondaryId(d)}</small>}</span>
                       <span className="att-reason">
                         {m.label} · {fmtRelative(d.lastUpdate)}
                       </span>

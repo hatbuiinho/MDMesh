@@ -5,7 +5,7 @@ import {
   type AgentRelease, type ActiveRollout, type RolloutCounts, type RolloutDevice, type DeviceRolloutStatus,
 } from '../api/rollout';
 import { useAuth } from '../auth/AuthContext';
-import { fmtRelative } from '../ui/format';
+import { deviceDisplayName, deviceSecondaryId, fmtRelative } from '../ui/format';
 import { ApkDropzone } from './ApkDropzone';
 
 const labels: Record<DeviceRolloutStatus, string> = {
@@ -107,7 +107,7 @@ export function RolloutPanel() {
   const canary = rollout?.progress.canary;
   const canPromote = !!canary && canary.total > 0 && canary.updated === canary.total;
   const canFinish = rollout?.stage === 'fleet' && rollout.devices.every((d) => d.status === 'updated' || d.status === 'ineligible');
-  const rows = (rollout?.devices ?? devices).filter((d) => d.deviceNumber.toLowerCase().includes(search.toLowerCase()) && (!filter || d.status === filter));
+  const rows = (rollout?.devices ?? devices).filter((d) => `${d.description ?? ''} ${d.deviceNumber}`.toLowerCase().includes(search.toLowerCase()) && (!filter || d.status === filter));
   const eligible = devices.filter((d) => d.status !== 'ineligible' && d.status !== 'updated').length;
 
   const updated = devices.filter((d) => d.status === 'updated').length;
@@ -187,7 +187,7 @@ export function RolloutPanel() {
       <div className="rollout-table-wrap"><table className="rollout-table">
         <thead><tr><th>Device</th><th>Installed version</th><th>Status</th><th>Last check-in</th><th /></tr></thead>
         <tbody>{rows.map((d) => <tr key={d.deviceNumber}>
-          <td>{!rollout && !allDevices && <input type="checkbox" aria-label={`Select ${d.deviceNumber}`} checked={selected.has(d.deviceNumber)} disabled={!canEdit || busy || d.status === 'ineligible' || d.status === 'updated'} onChange={() => toggle(d.deviceNumber)} />} <span className="mono">{d.deviceNumber}</span></td>
+          <td>{!rollout && !allDevices && <input type="checkbox" aria-label={`Select ${deviceDisplayName({ number: d.deviceNumber, description: d.description })}`} checked={selected.has(d.deviceNumber)} disabled={!canEdit || busy || d.status === 'ineligible' || d.status === 'updated'} onChange={() => toggle(d.deviceNumber)} />} <span className="rollout-device-name"><b>{deviceDisplayName({ number: d.deviceNumber, description: d.description })}</b>{deviceSecondaryId({ number: d.deviceNumber, description: d.description }) && <small className="mono">{d.deviceNumber}</small>}</span></td>
           <td>{d.agentVersion ?? 'Unknown'}{d.agentVersionCode != null && ` (${d.agentVersionCode})`}</td>
           <td><span className={`rollout-status ${d.status}`}>{labels[d.status]}</span>{d.cohort && <small> · {d.cohort}</small>}{d.detail && <details><summary>Details</summary><pre>{d.detail}</pre></details>}</td>
           <td>{d.lastSeen ? fmtRelative(d.lastSeen) : 'Never'}</td>

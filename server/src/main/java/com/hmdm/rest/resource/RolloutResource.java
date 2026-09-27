@@ -107,7 +107,7 @@ public class RolloutResource {
         List<Map<String, Object>> out = new ArrayList<>();
         for (RolloutDeviceRow d : mapper.listCustomerDevices(cust)) {
             Map<String, Object> v = new LinkedHashMap<>();
-            v.put("deviceNumber", d.getDeviceNumber()); v.put("agentVersion", d.getAgentVersion());
+            v.put("deviceNumber", d.getDeviceNumber()); v.put("description", d.getDescription()); v.put("agentVersion", d.getAgentVersion());
             v.put("agentVersionCode", d.getAgentVersionCode()); v.put("lastSeen", d.getLastSeen());
             v.put("status", AgentRolloutPolicy.status(r, d, System.currentTimeMillis()));
             v.put("identityVerified", d.getAgentSignatureChecksum() != null && d.getAgentPackageName() != null);
@@ -170,7 +170,7 @@ public class RolloutResource {
             cohort.put("total", cohort.get("total") + 1);
             cohort.put(status, cohort.get(status) + 1);
             Map<String, Object> v = new LinkedHashMap<>();
-            v.put("deviceNumber", d.getDeviceNumber()); v.put("agentVersion", d.getAgentVersion());
+            v.put("deviceNumber", d.getDeviceNumber()); v.put("description", d.getDescription()); v.put("agentVersion", d.getAgentVersion());
             v.put("agentVersionCode", d.getAgentVersionCode()); v.put("lastSeen", d.getLastSeen());
             v.put("cohort", isCanary ? "canary" : "fleet");
             v.put("status", !isCanary && !fleetStarted ? "not_started" : status);

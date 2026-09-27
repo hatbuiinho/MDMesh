@@ -8,6 +8,14 @@ data class ApplicationAllowlistPlan(
 )
 
 object ApplicationAllowlistPlanner {
+    fun shouldHidePackage(
+        enabled: Boolean,
+        packageName: String,
+        launchable: Boolean,
+        allowedPackages: Set<String>,
+        protectedPackages: Set<String>,
+    ): Boolean = enabled && launchable && packageName !in allowedPackages && packageName !in protectedPackages
+
     fun plan(
         enabled: Boolean,
         launchablePackages: Set<String>,
@@ -43,4 +51,11 @@ data class ApplicationAllowlistResult(
 
 fun interface ApplicationAllowlist {
     fun apply(enabled: Boolean, allowedPackages: Set<String>): ApplicationAllowlistResult
+
+    /** Enforce a package that has just been installed, before the deferred full reconciliation runs. */
+    fun applyPackage(
+        enabled: Boolean,
+        allowedPackages: Set<String>,
+        packageName: String,
+    ): ApplicationAllowlistResult = apply(enabled, allowedPackages)
 }

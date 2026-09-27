@@ -37,3 +37,11 @@ export function orDash(v?: string | number | null): string {
   if (v === undefined || v === null || v === '') return DASH;
   return String(v);
 }
+
+export function deviceDisplayName(device: { number?: string | null; description?: string | null }): string {
+  return device.description?.trim() || orDash(device.number);
+}
+
+export function deviceSecondaryId(device: { number?: string | null; description?: string | null }): string | null {
+  return device.description?.trim() && device.number ? device.number : null;
+}

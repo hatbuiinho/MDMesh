@@ -60,6 +60,55 @@ class DeviceOwnerApplicationAllowlist(
         return ApplicationAllowlistResult(true, hidden, restored, skipped)
     }
 
+    override fun applyPackage(
+        enabled: Boolean,
+        allowedPackages: Set<String>,
+        packageName: String,
+    ): ApplicationAllowlistResult {
+        if (!dpm.isDeviceOwnerApp(context.packageName)) return ApplicationAllowlistResult(false)
+        // PACKAGE_ADDED is delivered after PackageManager has committed the package. Query this
+        // package directly: a broad launcher query can briefly return a stale cached result here.
+        val launchable = runCatching {
+            context.packageManager.getLaunchIntentForPackage(packageName) != null
+        }.getOrDefault(false)
+        if (!ApplicationAllowlistPlanner.shouldHidePackage(
+                enabled,
+                packageName,
+                launchable,
+                allowedPackages,
+                protectedPackages(),
+            )) return ApplicationAllowlistResult(true)
+
+        val managed = prefs.getStringSet(KEY_HIDDEN, emptySet()).orEmpty().toMutableSet()
+        val alreadyHidden = runCatching { dpm.isApplicationHidden(admin, packageName) }.getOrDefault(false)
+        if (alreadyHidden) return ApplicationAllowlistResult(true)
+
+        return runCatching { dpm.setApplicationHidden(admin, packageName, true) }
+            .fold(
+                onSuccess = { changed ->
+                    val hidden = changed || runCatching {
+                        dpm.isApplicationHidden(admin, packageName)
+                    }.getOrDefault(false)
+                    if (hidden) {
+                        managed.add(packageName)
+                        prefs.edit().putStringSet(KEY_HIDDEN, managed).apply()
+                        ApplicationAllowlistResult(true, hidden = 1)
+                    } else {
+                        ApplicationAllowlistResult(
+                            true,
+                            skipped = mapOf(packageName to "Android refused to hide the package"),
+                        )
+                    }
+                },
+                onFailure = {
+                    ApplicationAllowlistResult(
+                        true,
+                        skipped = mapOf(packageName to (it.message ?: it.javaClass.simpleName)),
+                    )
+                },
+            )
+    }
+
     private fun launchablePackages(): Set<String> = runCatching {
         context.packageManager.queryIntentActivities(
             Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),

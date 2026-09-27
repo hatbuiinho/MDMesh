@@ -8,7 +8,7 @@ import {
 } from '../api/applications';
 import { installApp } from '../api/commands';
 import { statusMeta } from '../ui/status';
-import { fmtRelative, orDash } from '../ui/format';
+import { deviceDisplayName, deviceSecondaryId, fmtRelative } from '../ui/format';
 import { useToast } from '../ui/toast';
 import { Modal } from '../ui/Modal';
 
@@ -196,8 +196,8 @@ export function DeployModal({
                         onChange={() => toggle(d.number)}
                       />
                       <span className={`dot dot-${m.tone}`} />
-                      <span className="dd-nm">{orDash(d.number)}</span>
-                      <span className="dd-sub">{d.description}</span>
+                      <span className="dd-nm">{deviceDisplayName(d)}</span>
+                      <span className="dd-sub mono">{deviceSecondaryId(d)}</span>
                       <span className="dd-seen">{fmtRelative(d.lastUpdate)}</span>
                     </label>
                   );

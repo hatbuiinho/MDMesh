@@ -5,7 +5,7 @@ import { DeviceGlyph } from '../ui/DeviceGlyph';
 import { useDevices } from '../data/useDevices';
 import { isOnline as isOnlineByRecency } from '../ui/status';
 import { useToast } from '../ui/toast';
-import { fmtRelative, orDash } from '../ui/format';
+import { deviceDisplayName, deviceSecondaryId, fmtRelative, orDash } from '../ui/format';
 import {
   bulkSetConfiguration,
   deleteDevicesBulk,
@@ -463,11 +463,11 @@ function DeviceCard({
       <div className="h">
         <SelectBox selected={selected} onToggle={onToggle} />
         <span className={`dot ${online ? 'on' : 'off'}`} />
-        <span className="nm">{orDash(d.number)}</span>
+        <span className="nm">{deviceDisplayName(d)}</span>
         {dup > 1 && <DupBadge n={dup} />}
         <DeviceGlyph className="ico" name={d.description || d.number} size={16} />
       </div>
-      {d.description && <div className="sub">{d.description}</div>}
+      {deviceSecondaryId(d) && <div className="sub mono">{deviceSecondaryId(d)}</div>}
       <div className="kv">
         <div>
           <div className="k">Android</div>
@@ -520,8 +520,8 @@ function DeviceRow({
         <span className={`dot ${online ? 'on' : 'off'}`} />
         <DeviceGlyph className="ico" name={d.description || d.number} size={15} />
         <div style={{ minWidth: 0 }}>
-          <div className="nm">{orDash(d.number)}</div>
-          {d.description && <div className="sub">{d.description}</div>}
+          <div className="nm">{deviceDisplayName(d)}</div>
+          {deviceSecondaryId(d) && <div className="sub mono">{deviceSecondaryId(d)}</div>}
         </div>
         {dup > 1 && <DupBadge n={dup} />}
       </div>

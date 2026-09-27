@@ -3,8 +3,9 @@ import { getLatestScan, scanApps, type AppInfo } from '../api/deviceApps';
 import { forceSync, queueCommand } from '../api/commands';
 import { useToast } from '../ui/toast';
 import { Modal } from '../ui/Modal';
+import { deviceDisplayName } from '../ui/format';
 
-export function DeviceAppsTab({ device }: { device: { number: string } }) {
+export function DeviceAppsTab({ device }: { device: { number: string; description?: string | null } }) {
   const toast = useToast();
   const abortRef = useRef<AbortController | null>(null);
   const [apps, setApps] = useState<AppInfo[] | null>(null);
@@ -90,7 +91,7 @@ export function DeviceAppsTab({ device }: { device: { number: string } }) {
   return (
     <div className="device-apps">
         <h2>Installed apps</h2>
-        <p className="muted">Apps reported by {device.number}. Uninstall results appear in Control → Recent commands.</p>
+        <p className="muted">Apps reported by {deviceDisplayName(device)}. Uninstall results appear in Control → Recent commands.</p>
         <div className="kiosk-toolbar">
           <input className="kiosk-search" placeholder="Search apps…" aria-label="Search apps"
             value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -124,7 +125,7 @@ export function DeviceAppsTab({ device }: { device: { number: string } }) {
         </div>
         {selected && <Modal onClose={busy ? undefined : () => setSelected(null)} ariaLabel="Confirm uninstall">
             <h3>Uninstall app</h3>
-            <p>Remove <strong>{selected.label || selected.pkg}</strong> ({selected.pkg}) from {device.number}?</p>
+            <p>Remove <strong>{selected.label || selected.pkg}</strong> ({selected.pkg}) from {deviceDisplayName(device)}?</p>
             <div className="modal-actions">
               <button className="btn" disabled={busy} onClick={() => setSelected(null)}>Cancel</button>
               <button className="btn btn-danger" disabled={busy || scanning} onClick={() => { void uninstall(); }}>

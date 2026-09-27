@@ -4,6 +4,21 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ApplicationAllowlistPlannerTest {
+    @Test fun newlyInstalledLaunchablePackageIsHiddenUnlessAllowedOrProtected() {
+        assertEquals(true, ApplicationAllowlistPlanner.shouldHidePackage(
+            true, "com.example.new", true, setOf("com.example.allowed"), setOf("com.mdmesh.agent"),
+        ))
+        assertEquals(false, ApplicationAllowlistPlanner.shouldHidePackage(
+            true, "com.example.allowed", true, setOf("com.example.allowed"), emptySet(),
+        ))
+        assertEquals(false, ApplicationAllowlistPlanner.shouldHidePackage(
+            true, "com.mdmesh.agent", true, emptySet(), setOf("com.mdmesh.agent"),
+        ))
+        assertEquals(false, ApplicationAllowlistPlanner.shouldHidePackage(
+            false, "com.example.new", true, emptySet(), emptySet(),
+        ))
+    }
+
     @Test fun hidesOnlyLaunchableDisallowedPackages() {
         val plan = ApplicationAllowlistPlanner.plan(
             enabled = true,

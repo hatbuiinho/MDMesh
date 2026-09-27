@@ -13,6 +13,7 @@ export interface AgentRelease {
 export type DeviceRolloutStatus = 'updated' | 'pending' | 'waiting' | 'offline' | 'busy' | 'verifying' | 'failed' | 'ineligible' | 'not_started';
 export interface RolloutDevice {
   deviceNumber: string;
+  description?: string | null;
   agentVersion: string | null;
   agentVersionCode: number | null;
   lastSeen: number | null;

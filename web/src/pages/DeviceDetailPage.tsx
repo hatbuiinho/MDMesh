@@ -19,7 +19,7 @@ import {
 import { ApiError } from '../api/client';
 import { isOnline as isOnlineByRecency } from '../ui/status';
 import { useToast } from '../ui/toast';
-import { fmtDateTime, fmtRelative, orDash } from '../ui/format';
+import { deviceDisplayName, deviceSecondaryId, fmtDateTime, fmtRelative, orDash } from '../ui/format';
 
 type Tab = 'control' | 'apps' | 'telemetry' | 'events' | 'location';
 
@@ -105,7 +105,7 @@ function NameField({
   return (
     <button type="button" className="dd-name" onClick={() => setEditing(true)} title="Rename this device">
       <span className={`mfr ${device.description ? '' : 'muted'}`}>
-        {device.description || 'Add a name'}
+        {device.description ? 'Rename' : 'Add a name'}
       </span>
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M12 20h9" />
@@ -323,12 +323,12 @@ export function DeviceDetailPage() {
   ];
 
   return (
-    <AppShell title={device.number}>
+    <AppShell title={deviceDisplayName(device)}>
       <div className="crumb">
         <a href="/devices" onClick={(e) => { e.preventDefault(); navigate('/devices'); }}>
           Devices
         </a>{' '}
-        / {device.number}
+        / {deviceDisplayName(device)}
       </div>
 
       <div className="dd-cols">
@@ -340,7 +340,8 @@ export function DeviceDetailPage() {
             <span className="ago">· {fmtRelative(device.lastUpdate)}</span>
             <DeviceGlyph className="ico" name={device.description || device.number} size={20} />
           </div>
-          <h1>{device.number}</h1>
+          <h1>{deviceDisplayName(device)}</h1>
+          {deviceSecondaryId(device) && <div className="dd-device-id mono">{deviceSecondaryId(device)}</div>}
           <NameField
             device={device}
             onSaved={(desc) => setDevice((d) => (d ? { ...d, description: desc } : d))}

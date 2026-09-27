@@ -32,7 +32,7 @@ public class AgentRolloutDatabaseTest {
         ds.setCurrentSchema(schema);
         try (Connection c = ds.getConnection(); Statement s = c.createStatement()) {
             s.execute("CREATE TABLE customers(id INT PRIMARY KEY); INSERT INTO customers VALUES(1),(2)");
-            s.execute("CREATE TABLE devices(number VARCHAR(255) PRIMARY KEY, customerId INT, agentCapabilities TEXT)");
+            s.execute("CREATE TABLE devices(number VARCHAR(255) PRIMARY KEY, customerId INT, agentCapabilities TEXT, description TEXT)");
             s.execute("CREATE TABLE agentRollout(id SERIAL PRIMARY KEY, customerId INT, targetVersion TEXT, packageName TEXT, apkUrl TEXT, apkSha256 TEXT, apkVersionCode INT, stage TEXT, createdAt BIGINT, updatedAt BIGINT)");
             s.execute("CREATE UNIQUE INDEX uq_agentRollout_active ON agentRollout(customerId) WHERE stage IN ('canary','fleet')");
             s.execute("CREATE TABLE agentRolloutCanary(rolloutId INT, deviceNumber TEXT, PRIMARY KEY(rolloutId,deviceNumber))");
@@ -49,7 +49,7 @@ public class AgentRolloutDatabaseTest {
                 }
             }
             assertTrue(found);
-            s.execute("INSERT INTO devices VALUES ('canary',1,'{\"appManagement\":[\"silentInstall\"]}'),('offline',1,'{\"appManagement\":[\"silentInstall\"]}'),('other-tenant',2,'{}')");
+            s.execute("INSERT INTO devices VALUES ('canary',1,'{\"appManagement\":[\"silentInstall\"]}','Canary tablet'),('offline',1,'{\"appManagement\":[\"silentInstall\"]}',NULL),('other-tenant',2,'{}',NULL)");
         }
         org.apache.ibatis.session.Configuration config = new org.apache.ibatis.session.Configuration(new Environment("test", new JdbcTransactionFactory(), ds));
         config.addMapper(RolloutMapper.class); config.addMapper(AgentCommandMapper.class);
