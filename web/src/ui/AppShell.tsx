@@ -107,7 +107,9 @@ export function AppShell({
           </button>
           <span style={{ fontWeight: 600 }}>{title ?? 'MDMesh'}</span>
         </div>
-        <main className="content route-enter"><ReloadPrompt /><UpdateBanner />{children}</main>
+        <main className="content-scroll">
+          <div className="content route-enter"><ReloadPrompt /><UpdateBanner />{children}</div>
+        </main>
       </div>
     </div>
   );

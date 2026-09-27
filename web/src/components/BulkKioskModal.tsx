@@ -3,6 +3,7 @@ import { listApplications, type Application } from '../api/applications';
 import { bulkQueueCommand } from '../api/commands';
 import { buildKioskPayload, type KioskChoice } from './KioskEnterModal';
 import { useToast } from '../ui/toast';
+import { Modal } from '../ui/Modal';
 
 type Mode = 'launcher' | 'single';
 
@@ -66,8 +67,7 @@ export function BulkKioskModal({
     (a) => `${a.name} ${a.pkg}`.toLowerCase().includes(query.toLowerCase()));
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={busy ? undefined : onClose} ariaLabel="Bulk kiosk">
         <h3>Enter kiosk on {n} device{n === 1 ? '' : 's'}</h3>
         <div className="kiosk-mode">
           <label><input type="radio" checked={mode === 'launcher'}
@@ -111,7 +111,6 @@ export function BulkKioskModal({
             {busy ? 'Queueing…' : `Enter kiosk on ${n}`}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

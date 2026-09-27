@@ -3,6 +3,7 @@ import { scanApps, fetchIcons, getLatestScan, type AppInfo } from '../api/device
 import { listApplications, appCategory, type Application } from '../api/applications';
 import { queueCommand } from '../api/commands';
 import { useToast } from '../ui/toast';
+import { Modal } from '../ui/Modal';
 
 type Device = { number: string };
 type Mode = 'launcher' | 'single';
@@ -208,8 +209,7 @@ export function KioskEnterModal({
   }
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true">
-      <div className="modal kiosk-modal">
+    <Modal className="kiosk-modal" onClose={busy ? undefined : onClose} ariaLabel="Enter kiosk">
         <h3>Enter kiosk</h3>
         <p className="muted">Pick the apps to lock the device to — from your library, or by scanning the device.</p>
 
@@ -305,7 +305,6 @@ export function KioskEnterModal({
             {busy ? 'Sending…' : `Enter kiosk (${selected.size})`}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

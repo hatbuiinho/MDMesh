@@ -5,6 +5,7 @@ import {
 } from '../api/commands';
 import { useToast } from '../ui/toast';
 import { KioskEnterModal } from './KioskEnterModal';
+import { Modal } from '../ui/Modal';
 
 type Device = { number: string };
 
@@ -135,8 +136,7 @@ export function ActionConsole({ device }: { device: Device }) {
       )}
 
       {active && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true">
-          <div className="modal">
+        <Modal onClose={busy ? undefined : () => setActive(null)} ariaLabel={active.label}>
             <h3>{active.label}</h3>
             <p className="muted">{active.description}</p>
             {active.params?.map((p) => (
@@ -166,8 +166,7 @@ export function ActionConsole({ device }: { device: Device }) {
                 {active.danger ? 'Confirm' : 'Send'}
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

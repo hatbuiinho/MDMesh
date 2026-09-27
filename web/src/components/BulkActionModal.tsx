@@ -6,6 +6,7 @@ import {
 import { listApplications, type Application } from '../api/applications';
 import { BulkKioskModal } from './BulkKioskModal';
 import { useToast } from '../ui/toast';
+import { Modal } from '../ui/Modal';
 
 // Only safe + disruptive actions run in bulk; the destructive group (passcode-reset, wipe) is excluded.
 // kiosk-enter is handled by a dedicated Phase-3 flow, so it is filtered out here too.
@@ -123,8 +124,7 @@ export function BulkActionModal({
   }
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={busy ? undefined : onClose} ariaLabel="Run bulk action">
         <h3>Run action on {n} device{n === 1 ? '' : 's'}</h3>
 
         {showCatalog && (
@@ -216,7 +216,6 @@ export function BulkActionModal({
             </div>
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }

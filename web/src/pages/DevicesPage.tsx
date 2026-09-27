@@ -14,6 +14,7 @@ import {
 } from '../api/devices';
 import { listConfigurations, type ConfigurationSummary } from '../api/configurations';
 import { BulkActionModal } from '../components/BulkActionModal';
+import { Modal } from '../ui/Modal';
 
 type View = 'grid' | 'list';
 type StatusFilter = 'all' | 'online' | 'offline';
@@ -363,8 +364,7 @@ export function DevicesPage() {
       )}
 
       {moveOpen && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={() => setMoveOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <Modal onClose={busy ? undefined : () => setMoveOpen(false)} ariaLabel="Change configuration">
             <h3>Change configuration</h3>
             <p className="muted" style={{ marginTop: 2 }}>
               Move {selected.size} device{selected.size === 1 ? '' : 's'} to a configuration.
@@ -384,13 +384,11 @@ export function DevicesPage() {
                 {busy ? 'Moving…' : 'Move'}
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {delOpen && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={() => setDelOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <Modal onClose={busy ? undefined : () => setDelOpen(false)} ariaLabel="Delete devices">
             <h3>Delete devices</h3>
             <p className="muted" style={{ marginTop: 2 }}>
               Permanently remove {selected.size} device{selected.size === 1 ? '' : 's'} from MDMesh?
@@ -402,8 +400,7 @@ export function DevicesPage() {
                 {busy ? 'Deleting…' : `Delete ${selected.size}`}
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </AppShell>
   );

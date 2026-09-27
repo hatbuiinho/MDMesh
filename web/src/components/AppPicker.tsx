@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { appCategory, type AppCategory, type Application } from '../api/applications';
+import { Modal } from '../ui/Modal';
 
 const CAT_LABEL: Record<AppCategory, string> = {
   uploaded: 'Uploaded',
@@ -63,8 +64,7 @@ export function AppPicker({
   }
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="modal app-picker" onClick={(e) => e.stopPropagation()}>
+    <Modal className="app-picker" onClose={onClose} ariaLabel="Add apps">
         <h3>Add apps</h3>
 
         <div className="picker-top">
@@ -111,7 +111,6 @@ export function AppPicker({
             Add {picked.size || ''}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

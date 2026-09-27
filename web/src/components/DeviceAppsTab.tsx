@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { getLatestScan, scanApps, type AppInfo } from '../api/deviceApps';
 import { forceSync, queueCommand } from '../api/commands';
 import { useToast } from '../ui/toast';
+import { Modal } from '../ui/Modal';
 
 export function DeviceAppsTab({ device }: { device: { number: string } }) {
   const toast = useToast();
@@ -121,8 +122,7 @@ export function DeviceAppsTab({ device }: { device: { number: string } }) {
           ))}
           {apps && !visible.length && <p className="muted" style={{ padding: 10 }}>No apps match.</p>}
         </div>
-        {selected && <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Confirm uninstall">
-          <div className="modal">
+        {selected && <Modal onClose={busy ? undefined : () => setSelected(null)} ariaLabel="Confirm uninstall">
             <h3>Uninstall app</h3>
             <p>Remove <strong>{selected.label || selected.pkg}</strong> ({selected.pkg}) from {device.number}?</p>
             <div className="modal-actions">
@@ -131,8 +131,7 @@ export function DeviceAppsTab({ device }: { device: { number: string } }) {
                 {busy ? 'Sending…' : 'Confirm uninstall'}
               </button>
             </div>
-          </div>
-        </div>}
+        </Modal>}
     </div>
   );
 }

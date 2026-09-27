@@ -6,6 +6,7 @@ import {
 } from '../api/rollout';
 import { useAuth } from '../auth/AuthContext';
 import { fmtRelative } from '../ui/format';
+import { ApkDropzone } from './ApkDropzone';
 
 const labels: Record<DeviceRolloutStatus, string> = {
   updated: 'Updated / newer', pending: 'Installing', waiting: 'Waiting for check-in', offline: 'Waiting for connection',
@@ -33,6 +34,8 @@ export function RolloutPanel() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadName, setUploadName] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('');
@@ -80,9 +83,18 @@ export function RolloutPanel() {
   }
   async function upload(file?: File) {
     if (!file) return;
-    await act(async () => {
-      const r = await uploadAgentRelease(file); setReleaseId(String(r.id));
-    });
+    setUploadName(file.name); setUploadProgress(0);
+    setBusy(true); setErr(null);
+    try {
+      const r = await uploadAgentRelease(file, setUploadProgress);
+      setReleaseId(String(r.id));
+      await refresh();
+    } catch (e) {
+      setUploadName(null);
+      setErr((e as Error).message);
+    } finally {
+      setUploadProgress(null); setBusy(false);
+    }
   }
   const toggle = (number: string) => setSelected((old) => {
     const next = new Set(old); if (next.has(number)) next.delete(number); else next.add(number); return next;
@@ -98,60 +110,92 @@ export function RolloutPanel() {
   const rows = (rollout?.devices ?? devices).filter((d) => d.deviceNumber.toLowerCase().includes(search.toLowerCase()) && (!filter || d.status === filter));
   const eligible = devices.filter((d) => d.status !== 'ineligible' && d.status !== 'updated').length;
 
-  return <section className="panel">
-    <div className="panel-head"><h2 className="panel-title">Agent releases & rollout</h2></div>
-    <p className="muted">Upload a signed MDMesh APK, then deploy it to a test group or all devices. Offline devices remain targeted until you finish or cancel the rollout.</p>
-    <label className="set-row">
-      <span className="k">Upload agent APK<small>Keep the original keystore and increase versionCode. Maximum 128 MiB.</small></span>
-      <input type="file" accept=".apk" disabled={!canEdit || busy || loading} onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ''; void upload(file); }} />
-    </label>
-    {!loading && releases.length === 0 && <p className="muted">First upload the APK currently installed on your devices to establish the signing certificate, then upload the new version.</p>}
-    {err && <p role="alert" className="ub-warn">{err}</p>}
-    {loading && <p>Loading releases…</p>}
-    {!rollout && releases.length > 0 && <>
-      <label className="set-row"><span className="k">Release</span><select value={releaseId} disabled={!canEdit || busy} onChange={(e) => setReleaseId(e.target.value)}>
-        {releases.map((r) => <option key={r.id} value={r.id}>{r.versionName} ({r.versionCode}) · {r.packageName}</option>)}
-      </select></label>
-      {release && <details><summary>Verified APK details</summary><p>Package: {release.packageName}</p><p style={{ overflowWrap: 'anywhere' }}>Signing certificate: {release.signatureChecksum}<br />SHA-256: {release.sha256}</p><a href={release.url}>Download this APK</a></details>}
-      <label className="set-row"><span className="k">Deployment</span><select disabled={!canEdit || busy} value={allDevices ? 'all' : 'canary'} onChange={(e) => setAllDevices(e.target.value === 'all')}>
-        <option value="canary">Test group first (recommended)</option><option value="all">All devices in this organization</option>
-      </select></label>
-      <p>{previewLoading ? 'Checking devices…' : `${devices.length} devices · ${eligible} need an update · ${devices.filter((d) => d.status === 'updated').length} already updated · ${devices.filter((d) => d.status === 'ineligible').length} not eligible`}</p>
-      {devices.some((d) => !d.identityVerified) && <p className="muted">Older agents do not report their signing certificate or versionCode. Use a test group first; Android still verifies the package signature during installation.</p>}
-      <button className="btn btn-sm btn-primary" disabled={!canEdit || busy || previewLoading || !eligible || (!allDevices && selected.size === 0)} onClick={start}>
-        {busy ? 'Working…' : allDevices ? `Deploy to all ${devices.length} devices` : `Start canary (${selected.size})`}
-      </button>
-    </>}
-    {rollout && <>
-      <p><b>Agent {rollout.targetVersion} ({rollout.apkVersionCode})</b> · {rollout.stage}</p>
+  const updated = devices.filter((d) => d.status === 'updated').length;
+  const ineligible = devices.filter((d) => d.status === 'ineligible').length;
+
+  return <section className="panel rollout-panel">
+    <div className="panel-head rollout-title">
+      <div><h2 className="panel-title">Agent releases & rollout</h2><p>Upload, verify and deploy a signed MDMesh Agent APK.</p></div>
+      {rollout && <span className={`rollout-stage ${rollout.stage}`}>{rollout.stage}</span>}
+    </div>
+
+    {!rollout && <div className="rollout-section">
+      <div className="rollout-step"><span>1</span><div><b>Upload release</b><small>Keep the original signing key and increase versionCode.</small></div></div>
+      <ApkDropzone accept=".apk,application/vnd.android.package-archive" extensions={['.apk']}
+        maxBytes={128 * 1024 * 1024} disabled={!canEdit || loading} busy={busy && uploadProgress != null}
+        progress={uploadProgress} fileName={uploadName} title="Drop the signed Agent APK here"
+        hint="or click to browse · APK only · maximum 128 MiB" busyLabel={uploadProgress === 100 ? 'Verifying' : 'Uploading'}
+        onFile={(file) => { setErr(null); void upload(file); }} onError={setErr} />
+      {!loading && releases.length === 0 && <p className="rollout-note">First upload the APK currently installed on your devices to establish the signing certificate.</p>}
+    </div>}
+
+    {err && <div role="alert" className="rollout-alert">{err}</div>}
+    {loading && <div className="rollout-loading"><span className="spin" /> Loading releases…</div>}
+
+    {!rollout && releases.length > 0 && <div className="rollout-setup">
+      <div className="rollout-section">
+        <div className="rollout-step"><span>2</span><div><b>Choose release</b><small>The server verifies package metadata and signing certificate.</small></div></div>
+        <select className="sel rollout-release-select" value={releaseId} disabled={!canEdit || busy} onChange={(e) => setReleaseId(e.target.value)}>
+          {releases.map((r) => <option key={r.id} value={r.id}>{r.versionName} ({r.versionCode}) · {r.packageName}</option>)}
+        </select>
+        {release && <div className="release-card">
+          <div><span className="release-ok">✓ Verified APK</span><strong>{release.versionName}</strong><small className="mono">{release.packageName} · versionCode {release.versionCode}</small></div>
+          <a className="btn btn-sm" href={release.url}>Download</a>
+          <details><summary>Technical details</summary><dl><dt>Signing certificate</dt><dd>{release.signatureChecksum}</dd><dt>SHA-256</dt><dd>{release.sha256}</dd></dl></details>
+        </div>}
+      </div>
+
+      <div className="rollout-section">
+        <div className="rollout-step"><span>3</span><div><b>Choose deployment</b><small>Start with a test group before promoting to the fleet.</small></div></div>
+        <div className="rollout-mode" role="radiogroup" aria-label="Deployment mode">
+          <label className={!allDevices ? 'on' : ''}><input type="radio" checked={!allDevices} onChange={() => setAllDevices(false)} /> <span><b>Test group first</b><small>Recommended · select canary devices below</small></span></label>
+          <label className={allDevices ? 'on' : ''}><input type="radio" checked={allDevices} onChange={() => setAllDevices(true)} /> <span><b>All devices</b><small>Deploy immediately across the organization</small></span></label>
+        </div>
+        <div className="rollout-summary">
+          {previewLoading ? <><span className="spin" /> Checking devices…</> : <>
+            <span><b>{devices.length}</b> total</span><span><b>{eligible}</b> need update</span>
+            <span><b>{updated}</b> updated</span><span><b>{ineligible}</b> ineligible</span>
+          </>}
+        </div>
+        {devices.some((d) => !d.identityVerified) && <p className="rollout-note">Some older agents cannot report their signing identity. Android will still verify the APK during installation; use a canary first.</p>}
+      </div>
+    </div>}
+
+    {rollout && <div className="rollout-section active-rollout">
+      <div className="active-release"><div><small>Active release</small><strong>Agent {rollout.targetVersion}</strong><span className="mono">versionCode {rollout.apkVersionCode}</span></div></div>
       {rollout.progress.canary.total > 0 && <CohortBar label="Canary" counts={rollout.progress.canary} />}
       {rollout.progress.fleet && <CohortBar label="Fleet" counts={rollout.progress.fleet} />}
-      <div className="set-row" style={{ justifyContent: 'flex-end', gap: 8 }}>
-        {rollout.stage === 'canary' && <button className="btn btn-sm btn-primary" disabled={!canEdit || busy || !canPromote} onClick={() => {
+      <div className="rollout-actions">
+        {rollout.stage === 'canary' && <button className="btn btn-primary" disabled={!canEdit || busy || !canPromote} onClick={() => {
           if (window.confirm('Deploy this tested release to all remaining devices in this rollout?')) void act(() => promoteRollout(rollout.id));
         }}>Promote to fleet</button>}
-        {rollout.stage === 'fleet' && <button className="btn btn-sm" disabled={!canEdit || busy || !canFinish} onClick={() => void act(() => finishRollout(rollout.id))}>Finish</button>}
-        <button className="btn btn-sm" disabled={!canEdit || busy} onClick={() => {
+        {rollout.stage === 'fleet' && <button className="btn btn-primary" disabled={!canEdit || busy || !canFinish} onClick={() => void act(() => finishRollout(rollout.id))}>Finish rollout</button>}
+        <button className="btn" disabled={!canEdit || busy} onClick={() => {
           if (window.confirm('Stop this rollout? Offline devices will no longer receive it. Installs already delivered may still complete.')) void act(() => cancelRollout(rollout.id));
         }}>Cancel rollout</button>
       </div>
-    </>}
-    {(devices.length > 0 || rollout) && <>
-      <div className="set-row" style={{ gap: 8 }}>
-        <input aria-label="Search rollout devices" placeholder="Search device number" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select aria-label="Filter rollout status" value={filter} onChange={(e) => setFilter(e.target.value)}><option value="">All statuses</option>
-          {Object.entries(labels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select>
+    </div>}
+
+    {(devices.length > 0 || rollout) && <div className="rollout-devices">
+      <div className="rollout-device-head"><div><b>{rollout ? 'Rollout devices' : allDevices ? 'Deployment preview' : 'Select canary devices'}</b><small>{rows.length} shown{!rollout && !allDevices ? ` · ${selected.size} selected` : ''}</small></div>
+        <div className="rollout-filters">{!rollout && !allDevices && <button className="btn btn-sm" disabled={!canEdit || busy} onClick={() => {
+          const candidates = rows.filter((d) => d.status !== 'ineligible' && d.status !== 'updated').map((d) => d.deviceNumber);
+          setSelected(selected.size ? new Set() : new Set(candidates));
+        }}>{selected.size ? 'Clear selection' : 'Select shown'}</button>}<input className="input" aria-label="Search rollout devices" placeholder="Search device number" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <select className="sel" aria-label="Filter rollout status" value={filter} onChange={(e) => setFilter(e.target.value)}><option value="">All statuses</option>{Object.entries(labels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></div>
       </div>
-      <div style={{ overflow: 'auto', maxHeight: 480 }}><table style={{ width: '100%' }}>
-        <thead><tr><th>Device</th><th>Installed version</th><th>Status</th><th>Last check-in</th><th>Action</th></tr></thead>
+      <div className="rollout-table-wrap"><table className="rollout-table">
+        <thead><tr><th>Device</th><th>Installed version</th><th>Status</th><th>Last check-in</th><th /></tr></thead>
         <tbody>{rows.map((d) => <tr key={d.deviceNumber}>
-          <td>{!rollout && !allDevices && <input type="checkbox" aria-label={`Select ${d.deviceNumber}`} checked={selected.has(d.deviceNumber)} disabled={!canEdit || busy || d.status === 'ineligible' || d.status === 'updated'} onChange={() => toggle(d.deviceNumber)} />} {d.deviceNumber}</td>
+          <td>{!rollout && !allDevices && <input type="checkbox" aria-label={`Select ${d.deviceNumber}`} checked={selected.has(d.deviceNumber)} disabled={!canEdit || busy || d.status === 'ineligible' || d.status === 'updated'} onChange={() => toggle(d.deviceNumber)} />} <span className="mono">{d.deviceNumber}</span></td>
           <td>{d.agentVersion ?? 'Unknown'}{d.agentVersionCode != null && ` (${d.agentVersionCode})`}</td>
-          <td>{labels[d.status]}{d.cohort && ` · ${d.cohort}`}{d.detail && <details><summary>Details</summary><pre style={{ whiteSpace: 'pre-wrap', maxWidth: 400 }}>{d.detail}</pre></details>}</td>
+          <td><span className={`rollout-status ${d.status}`}>{labels[d.status]}</span>{d.cohort && <small> · {d.cohort}</small>}{d.detail && <details><summary>Details</summary><pre>{d.detail}</pre></details>}</td>
           <td>{d.lastSeen ? fmtRelative(d.lastSeen) : 'Never'}</td>
           <td>{rollout && d.status === 'failed' && <button className="btn btn-sm" disabled={!canEdit || busy} onClick={() => void act(() => retryRolloutDevice(rollout.id, d.deviceNumber))}>Retry</button>}</td>
         </tr>)}</tbody>
       </table></div>
-    </>}
+      {!rollout && <div className="rollout-start"><span>{allDevices ? `${eligible} eligible devices will receive this release.` : `${selected.size} canary device${selected.size === 1 ? '' : 's'} selected.`}</span>
+        <button className="btn btn-primary" disabled={!canEdit || busy || previewLoading || !eligible || (!allDevices && selected.size === 0)} onClick={start}>{busy ? 'Working…' : allDevices ? `Deploy to all ${devices.length}` : `Start canary (${selected.size})`}</button></div>}
+    </div>}
   </section>;
 }

@@ -1,5 +1,6 @@
 import type { Configuration } from '../api/configurations';
 import { KIOSK_AFFECTING_KEYS } from '../data/configFields';
+import { Modal } from '../ui/Modal';
 
 function appsKey(c: Configuration): string {
   const apps = (c.applications ?? []) as { id: number; action?: number }[];
@@ -25,15 +26,13 @@ export function kioskAffectingChanges(before: Configuration, after: Configuratio
 /** `count` null = the sync summary is unavailable: still confirm, without a number (fail closed). */
 export function KioskChangeConfirm({ count, keys, onCancel, onConfirm }: { count: number | null; keys: string[]; onCancel: () => void; onConfirm: () => void }) {
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={onCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onCancel} ariaLabel="Confirm kiosk changes">
         <h3>{count == null ? 'Change kiosk on its devices?' : `Change kiosk on ${count} device${count === 1 ? '' : 's'}?`}</h3>
         <p>This edit changes kiosk settings ({keys.join(', ')}). Every device assigned to this configuration will re-apply kiosk at its next check-in, usually within seconds. Turning kiosk off lifts it only on devices that entered kiosk through this configuration.</p>
         <div className="modal-actions">
           <button className="btn" onClick={onCancel}>Keep editing</button>
           <button className="btn btn-primary" onClick={onConfirm}>Save and apply</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

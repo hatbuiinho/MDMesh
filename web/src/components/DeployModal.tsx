@@ -10,6 +10,7 @@ import { installApp } from '../api/commands';
 import { statusMeta } from '../ui/status';
 import { fmtRelative, orDash } from '../ui/format';
 import { useToast } from '../ui/toast';
+import { Modal } from '../ui/Modal';
 
 /** An app resolved to everything needed to deploy it. */
 export interface DeploySubject {
@@ -143,8 +144,7 @@ export function DeployModal({
   const canSubmit = tab === 'device' ? picked.size > 0 : !!config;
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="modal deploy-modal" onClick={(e) => e.stopPropagation()}>
+    <Modal className="deploy-modal" onClose={busy ? undefined : onClose} ariaLabel={`Deploy ${subject.label}`}>
         <h3>Deploy {subject.label}</h3>
         <p className="muted" style={{ marginTop: 2 }}>
           <span className="mono">{subject.packageName}</span>
@@ -248,7 +248,6 @@ export function DeployModal({
             {busy ? 'Deploying…' : tab === 'device' ? `Deploy to ${picked.size || ''}`.trim() : 'Assign'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

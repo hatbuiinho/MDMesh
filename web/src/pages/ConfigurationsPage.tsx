@@ -21,6 +21,7 @@ import {
 import { AppPicker } from '../components/AppPicker';
 import { SyncBar } from '../components/SyncBar';
 import { KioskChangeConfirm, kioskAffectingChanges } from '../components/KioskChangeConfirm';
+import { Modal } from '../ui/Modal';
 
 // The seeded device-template defaults are locked: view-only, and used as bases
 // for new configs (start from scratch or from one of these).
@@ -253,8 +254,7 @@ function NewChooser({
   onPick: (base: Configuration | null) => void;
 }) {
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={onClose} ariaLabel="New configuration">
         <h3>New configuration</h3>
         <p className="muted" style={{ margin: '2px 0 14px' }}>Start from scratch, or base it on a default template.</p>
         <div className="chooser-list">
@@ -272,8 +272,7 @@ function NewChooser({
         <div className="modal-actions">
           <button className="btn" onClick={onClose}>Cancel</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -295,8 +294,7 @@ function CopyModal({ source, onClose, onDone }: { source: Configuration; onClose
     }
   }
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <Modal onClose={busy ? undefined : onClose} ariaLabel="Copy configuration">
         <h3>Copy configuration</h3>
         <label className="field"><span>New name</span>
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
@@ -307,8 +305,7 @@ function CopyModal({ source, onClose, onDone }: { source: Configuration; onClose
             {busy ? 'Copying…' : 'Copy'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

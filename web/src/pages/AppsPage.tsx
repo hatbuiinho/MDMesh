@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '../ui/AppShell';
 import { useToast } from '../ui/toast';
 import {
@@ -13,6 +13,7 @@ import {
 } from '../api/applications';
 import { searchFdroid, type FDroidApp } from '../api/fdroid';
 import { DeployModal, type DeploySubject } from '../components/DeployModal';
+import { ApkDropzone } from '../components/ApkDropzone';
 
 type SourceId = 'library' | 'custom' | 'fdroid' | 'play';
 
@@ -217,10 +218,8 @@ function CustomSource({ onDeploy }: { onDeploy: (s: DeploySubject) => void }) {
   const [sha, setSha] = useState('');
   const [bundle, setBundle] = useState<BundleUploadResult | null>(null);
   const [savedAppId, setSavedAppId] = useState<number | undefined>(undefined);
-  const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dropped, setDropped] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   async function onFile(file: File) {
     setSavedAppId(undefined); // fresh file → drop any prior Library id
@@ -421,55 +420,18 @@ function CustomSource({ onDeploy }: { onDeploy: (s: DeploySubject) => void }) {
         </div>
       </div>
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div
-          className={`dropzone ${dragging ? 'over' : ''} ${uploading ? 'busy' : ''}`}
-          onClick={() => !uploading && fileRef.current?.click()}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragging(false);
-            const f = e.dataTransfer.files?.[0];
-            if (f) void onFile(f);
-          }}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && fileRef.current?.click()}
-        >
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".apk,.xapk,.apks,.apkm,.zip,application/vnd.android.package-archive"
-            hidden
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void onFile(f);
-              e.target.value = '';
-            }}
-          />
-          {uploading ? (
-            <span className="dz-main"><span className="spin" /> Analyzing {dropped}…</span>
-          ) : dropped ? (
-            <span className="dz-main">
-              ✓ {dropped}
-              <span className="dz-sub">
-                {bundle
-                  ? `Split bundle · ${bundle.parts.length} part${bundle.parts.length === 1 ? '' : 's'} · drop another to replace`
-                  : 'Drop another to replace'}
-              </span>
-            </span>
-          ) : (
-            <span className="dz-main">
-              Drop an APK or split bundle here, or click to browse
-              <span className="dz-sub">
-                APK, or .xapk / .apks / .apkm / .zip — auto-fills package, version and hosted URL(s)
-              </span>
-            </span>
-          )}
-        </div>
+        <ApkDropzone
+          accept=".apk,.xapk,.apks,.apkm,.zip,application/vnd.android.package-archive"
+          extensions={['.apk', '.xapk', '.apks', '.apkm', '.zip']}
+          maxBytes={128 * 1024 * 1024}
+          busy={uploading}
+          fileName={dropped}
+          title="Drop an APK or split bundle here"
+          hint="or click to browse · APK, XAPK, APKS, APKM or ZIP · maximum 128 MiB"
+          busyLabel={isBundleName(dropped ?? '') ? 'Analyzing bundle' : 'Analyzing APK'}
+          onFile={(file) => { void onFile(file); }}
+          onError={(message) => toast.push('err', 'Invalid file', message)}
+        />
         <p className="note" style={{ margin: 0 }}>
           Point the agent at any reachable APK, or drop a file to upload and host it here.
           Split bundles (<span className="mono">.xapk</span> / <span className="mono">.apks</span> /{' '}
