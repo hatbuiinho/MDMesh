@@ -31,8 +31,33 @@ services:
         condition: service_healthy
     ports:
       - "8080:8080"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: mdmesh
+      DB_USER: mdmesh
+      DB_PASSWORD: mdmesh
+      BASE_URL: http://localhost:8080
+      HASH_SECRET: dev-only-change-me
+      PLAY_STORE_ENABLED: ${PLAY_STORE_ENABLED:-false}
+      PLAY_BRIDGE_URL: ${PLAY_BRIDGE_URL:-http://play-bridge:8787}
+      PLAY_BRIDGE_API_KEY: ${PLAY_BRIDGE_API_KEY:-}
     # 31000 is the embedded MQTT broker; expose if you want devices to reach it directly.
     # - "31000:31000"
 
+  play-bridge:
+    profiles: ["playstore"]
+    build:
+      context: ./play-bridge
+    environment:
+      PLAY_BRIDGE_API_KEY: ${PLAY_BRIDGE_API_KEY:-}
+      GPLAYDL_API_KEY: ${GPLAYDL_API_KEY:-}
+      GPLAYDL_DISPENSER_URL: ${GPLAYDL_DISPENSER_URL:-}
+      PLAY_DEVICE_ARCH: ${PLAY_DEVICE_ARCH:-arm64}
+      PLAY_DEVICE_LOCALE: ${PLAY_DEVICE_LOCALE:-en-US}
+    volumes:
+      - playdata:/data
+
 volumes:
   pgdata:
+  playdata:

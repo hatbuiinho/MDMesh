@@ -12,6 +12,7 @@ import {
   type BundleUploadResult,
 } from '../api/applications';
 import { searchFdroid, type FDroidApp } from '../api/fdroid';
+import { getPlayStatus, importPlayApp, searchPlay, type PlayApp, type PlayStatus } from '../api/playstore';
 import { DeployModal, type DeploySubject } from '../components/DeployModal';
 import { ApkDropzone } from '../components/ApkDropzone';
 
@@ -28,7 +29,7 @@ const SOURCES: Source[] = [
   { id: 'library', label: 'Library', enabled: true, tip: 'Apps already uploaded to this MDMesh server.' },
   { id: 'custom', label: 'Custom APK', enabled: true, tip: 'Deploy any APK by file or URL — including APKMirror / APKPure downloads.' },
   { id: 'fdroid', label: 'F-Droid', enabled: true, tip: 'Search the F-Droid open-source catalogue and deploy straight from f-droid.org.' },
-  { id: 'play', label: 'Play Store', enabled: false, tip: 'Download via a Google account (Aurora-style dispenser). Not built yet.' },
+  { id: 'play', label: 'Play Store', enabled: true, tip: 'Import free apps through your self-hosted Aurora Play Bridge.' },
 ];
 
 // APKMirror / APKPure have no usable API and forbid embedding — they're search
@@ -110,9 +111,120 @@ export function AppsPage() {
       )}
       {source === 'custom' && <CustomSource onDeploy={setDeploy} />}
       {source === 'fdroid' && <FDroidSource onDeploy={setDeploy} />}
+      {source === 'play' && <PlayStoreSource onDeploy={setDeploy} />}
 
       {deploy && <DeployModal subject={deploy} onClose={() => setDeploy(null)} />}
     </AppShell>
+  );
+}
+
+function PlayStoreSource({ onDeploy }: { onDeploy: (s: DeploySubject) => void }) {
+  const toast = useToast();
+  const [status, setStatus] = useState<PlayStatus | null>(null);
+  const [q, setQ] = useState('');
+  const [apps, setApps] = useState<PlayApp[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState<string | null>(null);
+
+  useEffect(() => {
+    getPlayStatus()
+      .then(setStatus)
+      .catch(() => setStatus({ enabled: false, available: false, profile: 'arm64-v8a', message: 'Could not read Play Store status.' }));
+  }, []);
+
+  useEffect(() => {
+    if (!status?.enabled || !status.available || q.trim().length < 2) {
+      setApps([]);
+      setSearching(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setSearching(true);
+      setError(null);
+      searchPlay(q, 30, controller.signal)
+        .then(setApps)
+        .catch((e) => {
+          if (controller.signal.aborted) return;
+          setApps([]);
+          setError(e instanceof Error ? e.message : 'Play Store search failed.');
+        })
+        .finally(() => !controller.signal.aborted && setSearching(false));
+    }, 350);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [q, status]);
+
+  async function importAndDeploy(app: PlayApp) {
+    setImporting(app.packageName);
+    setError(null);
+    try {
+      const imported = await importPlayApp(app.packageName);
+      const version = imported.version || String(imported.versionCode);
+      let applicationId: number | undefined;
+      try {
+        const saved = await saveAndroidApplication(imported.parts.length === 1
+          ? { name: imported.name, pkg: imported.packageName, url: imported.parts[0].url, version, versionCode: imported.versionCode, type: 'app' }
+          : { name: imported.name, pkg: imported.packageName, version, versionCode: imported.versionCode, type: 'app', parts: JSON.stringify(imported.parts) });
+        applicationId = saved.id;
+      } catch {
+        applicationId = (await listApplications(imported.packageName).catch(() => []))
+          .find((item) => item.pkg === imported.packageName)?.id;
+      }
+      toast.push('ok', 'Imported from Play Store', `${imported.name} is hosted in your Library.`);
+      onDeploy({
+        label: imported.name,
+        packageName: imported.packageName,
+        url: imported.parts.length === 1 ? imported.parts[0].url : '',
+        versionCode: imported.versionCode,
+        sha256: imported.parts.length === 1 ? imported.parts[0].sha256 : undefined,
+        parts: imported.parts.length > 1 ? imported.parts.map(({ url, sha256 }) => ({ url, sha256 })) : undefined,
+        applicationId,
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'The app could not be imported.';
+      setError(message);
+      toast.push('err', 'Play Store import failed', message);
+    } finally {
+      setImporting(null);
+    }
+  }
+
+  if (status === null) return <div className="panel"><div className="empty"><span className="spin" /> Checking Play Bridge…</div></div>;
+  if (!status.enabled || !status.available) {
+    return (
+      <div className="panel" style={{ maxWidth: 680 }}>
+        <div className="empty">
+          <span className="label">Play Store integration is not ready</span>
+          {status.message || 'Configure the self-hosted Play Bridge to enable imports.'}
+          <span className="note">Set PLAY_STORE_ENABLED, PLAY_BRIDGE_URL and PLAY_BRIDGE_API_KEY on the server.</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="dv-search" style={{ width: 340, marginBottom: 16 }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
+        <input type="search" placeholder="Search Play Store" value={q} onChange={(e) => setQ(e.target.value)} />
+      </div>
+      {error && <div className="banner banner-alert">{error}</div>}
+      {searching ? <div className="panel"><div className="empty"><span className="spin" /> Searching Play Store…</div></div>
+        : q.trim().length < 2 ? <div className="panel"><div className="empty"><span className="label">Search free Play Store apps</span>Enter at least two characters or an exact package name.</div></div>
+        : apps.length === 0 ? <div className="panel"><div className="empty"><span className="label">No results</span>No compatible apps matched your search.</div></div>
+        : <div className="app-grid">{apps.map((app) => {
+          const blocked = app.paid || app.compatible === false;
+          return <div className="app-card" key={app.packageName}>
+            <div className="app-top"><AppIcon name={app.name} url={app.iconUrl} /><div className="app-meta"><div className="app-nm">{app.name}</div><div className="app-pkg mono">{app.packageName}</div></div></div>
+            {app.summary && <div className="app-sum">{app.summary}</div>}
+            <div className="app-foot"><span className="app-ver">{app.paid ? 'Paid — unsupported' : app.compatible === false ? 'Incompatible' : app.versionName ? `v${app.versionName}` : 'Free'}</span>
+              <button className="btn btn-sm btn-primary" disabled={blocked || importing !== null} onClick={() => importAndDeploy(app)}>{importing === app.packageName ? 'Importing…' : 'Import & deploy'}</button>
+            </div>
+          </div>;
+        })}</div>}
+      <p className="note" style={{ marginTop: 14 }}>Imported artifacts are stored on MDMesh for the configured {status.profile} profile. Aurora uses an unofficial Google Play protocol.</p>
+    </>
   );
 }
 

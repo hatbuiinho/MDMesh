@@ -48,8 +48,26 @@ services:
       SMTP_FROM: ${SMTP_FROM:-mdm@localhost}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      PLAY_STORE_ENABLED: ${PLAY_STORE_ENABLED:-false}
+      PLAY_BRIDGE_URL: ${PLAY_BRIDGE_URL:-http://play-bridge:8787}
+      PLAY_BRIDGE_API_KEY: ${PLAY_BRIDGE_API_KEY:-}
+      PLAY_DEVICE_PROFILE: ${PLAY_DEVICE_PROFILE:-arm64-v8a}
     volumes:
       - mdmeshdata:/opt/mdmesh
+
+  play-bridge:
+    profiles: ["playstore"]
+    build:
+      context: ./play-bridge
+    restart: unless-stopped
+    environment:
+      PLAY_BRIDGE_API_KEY: ${PLAY_BRIDGE_API_KEY:-}
+      GPLAYDL_API_KEY: ${GPLAYDL_API_KEY:-}
+      GPLAYDL_DISPENSER_URL: ${GPLAYDL_DISPENSER_URL:-}
+      PLAY_DEVICE_ARCH: ${PLAY_DEVICE_ARCH:-arm64}
+      PLAY_DEVICE_LOCALE: ${PLAY_DEVICE_LOCALE:-en-US}
+    volumes:
+      - playdata:/data
 
   caddy:
     # The web image (Caddy + baked SPA). Same pull/build duality as `server`; WEB_VERSION tracks the
@@ -127,3 +145,4 @@ volumes:
   caddy_data:
   caddy_config:
   backups:   # supervisor pre-update DB dumps + version snapshots + auto.json (survives recreate)
+  playdata:  # optional Play Bridge APK/token cache
