@@ -81,12 +81,32 @@ public class PlayStoreResource {
         try {
             JsonNode health = getJson(bridgeUrl + "/v1/health");
             out.put("available", health.path("ok").asBoolean(true));
+            out.put("linked", health.path("linked").asBoolean(false));
+            out.put("dispenserUrl", envOr("PLAY_DISPENSER_PUBLIC_URL", trimSlash(baseUrl) + "/play-dispenser"));
             out.put("message", health.path("message").asText("Play Bridge is ready."));
         } catch (Exception e) {
             out.put("available", false);
             out.put("message", "Play Bridge is unavailable.");
         }
         return Response.OK(out);
+    }
+
+    @POST @Path("/pair") @Consumes(MediaType.APPLICATION_JSON) @Produces(MediaType.APPLICATION_JSON)
+    @ApiOperation("Pair Play Bridge with a private dispenser account")
+    public Response pair(PairRequest request) {
+        if (!SecurityContext.get().hasPermission("edit_applications")) return Response.PERMISSION_DENIED();
+        if (!enabled()) return Response.ERROR("error.play.disabled");
+        if (request == null || request.code == null || !request.code.replaceAll("[\\s-]", "").matches("[A-HJ-NP-Za-hj-np-z2-9]{8}")) {
+            return Response.ERROR("error.play.pairingCode");
+        }
+        try {
+            JsonNode result = postJson(bridgeUrl + "/v1/pair", Collections.singletonMap("code", request.code));
+            return Response.OK(mapper.convertValue(result, new TypeReference<Object>() {}));
+        } catch (BridgeException e) {
+            return Response.ERROR(e.messageKey);
+        } catch (Exception e) {
+            return Response.ERROR("error.play.pairing");
+        }
     }
 
     @GET @Path("/search") @Produces(MediaType.APPLICATION_JSON)
@@ -204,6 +224,22 @@ public class PlayStoreResource {
         } finally { connection.disconnect(); }
     }
 
+    private JsonNode postJson(String url, Object body) throws Exception {
+        HttpURLConnection connection = open(url);
+        connection.setRequestMethod("POST");
+        connection.setDoOutput(true);
+        connection.setRequestProperty("Content-Type", "application/json");
+        byte[] payload = mapper.writeValueAsBytes(body);
+        try (OutputStream output = connection.getOutputStream()) { output.write(payload); }
+        try {
+            int status = connection.getResponseCode();
+            if (status != 200) throw new BridgeException(status == 400 ? "error.play.pairingCode" : "error.play.unavailable");
+            try (InputStream in = new BoundedInputStream(connection.getInputStream(), 64 * 1024L)) {
+                return mapper.readTree(in);
+            }
+        } finally { connection.disconnect(); }
+    }
+
     private HttpURLConnection open(String url) throws IOException {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         connection.setConnectTimeout(10_000); connection.setReadTimeout(120_000);
@@ -247,6 +283,7 @@ public class PlayStoreResource {
     }
 
     public static class ImportRequest { public String packageName; }
+    public static class PairRequest { public String code; }
     private static class BridgeException extends Exception { final String messageKey; BridgeException(String key) { super(key); this.messageKey = key; } }
     private static class BoundedInputStream extends FilterInputStream {
         private final long max; private long count;

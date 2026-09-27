@@ -72,6 +72,8 @@ else
 fi
 
 DB_PASSWORD=$(rand); HASH_SECRET=$(rand); ADMIN_PASSWORD=$(rand); RESET_TOKEN=$(openssl rand -hex 16)
+PLAY_BRIDGE_API_KEY=$(rand); PLAY_DISPENSER_DB_PASSWORD=$(rand)
+PLAY_DISPENSER_ENCRYPTION_KEY=$(openssl rand -hex 32)
 
 if [ "$MODE" = "1" ]; then
   read -rp "Public hostname devices will use (e.g. mdm.example.com): " HOST
@@ -125,6 +127,11 @@ COMPOSE_PROFILES=${COMPOSE_PROFILES}
 SMTP_HOST=
 SMTP_PORT=25
 SMTP_FROM=mdm@${HOST}
+PLAY_STORE_ENABLED=false
+PLAY_BRIDGE_API_KEY=${PLAY_BRIDGE_API_KEY}
+PLAY_DISPENSER_DB_PASSWORD=${PLAY_DISPENSER_DB_PASSWORD}
+PLAY_DISPENSER_ENCRYPTION_KEY=${PLAY_DISPENSER_ENCRYPTION_KEY}
+PLAY_DISPENSER_PUBLIC_URL=${BASE_URL}/play-dispenser
 EOF
 chmod 600 .env
 say "Wrote .env (secrets generated). docker compose reads COMPOSE_FILE/PROFILES from it."

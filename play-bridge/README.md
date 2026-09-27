@@ -10,15 +10,14 @@ are the same Aurora-style reverse-engineered Google Play access.
 
 ## Account setup
 
-Use a dedicated Google account. Link it through a gplaydl-compatible dispenser
-(self-hosting is recommended), then place the resulting key in
-`GPLAYDL_API_KEY`. Do not use a personal Google account.
+Use a dedicated Google account. The MDMesh `playstore` Compose profile includes
+a private dispenser. Add the account with gplaydl Authenticator and enter its
+pairing code in Apps > Play Store. Do not use a personal Google account.
 
 Required environment:
 
 - `PLAY_BRIDGE_API_KEY`: shared secret used only between MDMesh and this service.
-- `GPLAYDL_API_KEY`: key produced by linking gplaydl to its dispenser.
-- `GPLAYDL_DISPENSER_URL`: dispenser base URL; defaults to the upstream service.
+- `GPLAYDL_DISPENSER_URL`: internal dispenser URL; Compose sets it automatically.
 
 Optional environment:
 
@@ -26,4 +25,6 @@ Optional environment:
 - `PLAY_DEVICE_LOCALE=en-US`
 - `PLAY_MAX_ARTIFACT_BYTES=524288000`
 
-The bridge cache is stored in `/data`. No port needs to be exposed publicly.
+The claimed dispenser key and bridge cache are stored in `/data`. No bridge
+port needs to be exposed publicly. `GPLAYDL_API_KEY` remains an optional
+headless override, but normal MDMesh setup does not require it.

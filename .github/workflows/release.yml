@@ -126,6 +126,16 @@ jobs:
           # Publish exactly the image the smoke step tested (no rebuild).
           docker tag "$SUP_IMG" "$IMG:$VERSION"
           docker push "$IMG:$VERSION"
+      - name: Optional Play Store images
+        env:
+          OWNER: ${{ github.repository_owner }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          O=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          docker build -f play-bridge/Dockerfile -t "ghcr.io/${O}/mdmesh-play-bridge:$VERSION" play-bridge
+          docker push "ghcr.io/${O}/mdmesh-play-bridge:$VERSION"
+          docker build -f docker/play-dispenser.Dockerfile -t "ghcr.io/${O}/mdmesh-play-dispenser:$VERSION" .
+          docker push "ghcr.io/${O}/mdmesh-play-dispenser:$VERSION"
       - name: Verify images are publicly pullable (guards against private GHCR packages, #3)
         env:
           OWNER: ${{ github.repository_owner }}
@@ -133,7 +143,7 @@ jobs:
         run: |
           O=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
           fail=0
-          for img in mdmesh-server mdmesh-web mdmesh-supervisor; do
+          for img in mdmesh-server mdmesh-web mdmesh-supervisor mdmesh-play-bridge mdmesh-play-dispenser; do
             # No credentials on purpose: this is exactly what the quickstart does on a fresh box.
             tok=$(curl -fsS "https://ghcr.io/token?scope=repository:${O}/${img}:pull" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
             code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer ${tok}" \
@@ -191,7 +201,7 @@ jobs:
           VERSION: ${{ steps.ver.outputs.version }}
         run: |
           O=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
-          IMGS="mdmesh-server mdmesh-web mdmesh-supervisor"
+          IMGS="mdmesh-server mdmesh-web mdmesh-supervisor mdmesh-play-bridge mdmesh-play-dispenser"
           digest() { docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$1"; }
           declare -A want
           for img in $IMGS; do

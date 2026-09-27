@@ -3,8 +3,10 @@ import { apiClient } from './client';
 export interface PlayStatus {
   enabled: boolean;
   available: boolean;
+  linked?: boolean;
   profile: string;
   message?: string;
+  dispenserUrl?: string;
 }
 
 export interface PlayApp {
@@ -37,3 +39,6 @@ export function searchPlay(query: string, limit = 30, signal?: AbortSignal): Pro
 
 export const importPlayApp = (packageName: string): Promise<PlayImportResult> =>
   apiClient.post('/private/play/import', { packageName });
+
+export const pairPlayAccount = (code: string): Promise<{ linked: boolean; message?: string }> =>
+  apiClient.post('/private/play/pair', { code });

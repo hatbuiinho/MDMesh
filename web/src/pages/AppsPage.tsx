@@ -12,7 +12,7 @@ import {
   type BundleUploadResult,
 } from '../api/applications';
 import { searchFdroid, type FDroidApp } from '../api/fdroid';
-import { getPlayStatus, importPlayApp, searchPlay, type PlayApp, type PlayStatus } from '../api/playstore';
+import { getPlayStatus, importPlayApp, pairPlayAccount, searchPlay, type PlayApp, type PlayStatus } from '../api/playstore';
 import { DeployModal, type DeploySubject } from '../components/DeployModal';
 import { ApkDropzone } from '../components/ApkDropzone';
 
@@ -126,6 +126,8 @@ function PlayStoreSource({ onDeploy }: { onDeploy: (s: DeploySubject) => void })
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState<string | null>(null);
+  const [pairingCode, setPairingCode] = useState('');
+  const [pairing, setPairing] = useState(false);
 
   useEffect(() => {
     getPlayStatus()
@@ -190,6 +192,26 @@ function PlayStoreSource({ onDeploy }: { onDeploy: (s: DeploySubject) => void })
     }
   }
 
+  async function pairAccount() {
+    const code = pairingCode.replace(/[\s-]/g, '').toUpperCase();
+    if (!/^[A-HJ-NP-Z2-9]{8}$/.test(code)) {
+      toast.push('err', 'Invalid pairing code', 'Enter the 8-character code shown by Authenticator.');
+      return;
+    }
+    setPairing(true);
+    try {
+      await pairPlayAccount(code);
+      const next = await getPlayStatus();
+      setStatus(next);
+      setPairingCode('');
+      toast.push('ok', 'Play account linked', 'Private Play Store search and import are ready.');
+    } catch (e) {
+      toast.push('err', 'Pairing failed', e instanceof Error ? e.message : 'The code may have expired.');
+    } finally {
+      setPairing(false);
+    }
+  }
+
   if (status === null) return <div className="panel"><div className="empty"><span className="spin" /> Checking Play Bridge…</div></div>;
   if (!status.enabled || !status.available) {
     return (
@@ -199,6 +221,26 @@ function PlayStoreSource({ onDeploy }: { onDeploy: (s: DeploySubject) => void })
           {status.message || 'Configure the self-hosted Play Bridge to enable imports.'}
           <span className="note">Set PLAY_STORE_ENABLED, PLAY_BRIDGE_URL and PLAY_BRIDGE_API_KEY on the server.</span>
         </div>
+      </div>
+    );
+  }
+  if (!status.linked) {
+    return (
+      <div className="panel" style={{ maxWidth: 680 }}>
+        <div className="panel-head"><h2 className="panel-title">Link a private Play account</h2></div>
+        <p className="note">Use a dedicated Google account. Its password and 2FA stay on the Android Authenticator; MDMesh receives only a revocable dispenser key.</p>
+        <ol className="note" style={{ lineHeight: 1.8 }}>
+          <li>Install gplaydl Authenticator on an Android phone.</li>
+          <li>In Authenticator Settings, set the server to <span className="mono">{status.dispenserUrl}</span>.</li>
+          <li>Add the dedicated Google account, open “Link gplaydl”, then enter the code below.</li>
+        </ol>
+        <div className="form-row" style={{ alignItems: 'end' }}>
+          <label className="field" style={{ maxWidth: 260 }}><span>Pairing code</span>
+            <input className="input mono" value={pairingCode} maxLength={9} placeholder="ABCD-EFGH" onChange={(e) => setPairingCode(e.target.value.toUpperCase())} />
+          </label>
+          <button className="btn btn-primary" disabled={pairing || pairingCode.trim().length < 8} onClick={pairAccount}>{pairing ? 'Linking…' : 'Link account'}</button>
+        </div>
+        <p className="note"><a href="https://github.com/rehmatworks/gplaydl-authenticator/releases" target="_blank" rel="noreferrer">Download Authenticator ↗</a></p>
       </div>
     );
   }

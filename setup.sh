@@ -155,6 +155,20 @@ EOF
   say "Wrote .env (secrets generated)."
 fi
 
+# Provision stable secrets for the optional private Play dispenser even while its profile is off.
+# Generating them here makes enabling `playstore` later a flag change, not a manual secret ceremony.
+PLAY_BRIDGE_API_KEY=${PLAY_BRIDGE_API_KEY:-$(rand)}
+PLAY_DISPENSER_DB_PASSWORD=${PLAY_DISPENSER_DB_PASSWORD:-$(rand)}
+PLAY_DISPENSER_ENCRYPTION_KEY=${PLAY_DISPENSER_ENCRYPTION_KEY:-$(openssl rand -hex 32)}
+PLAY_DISPENSER_PUBLIC_URL=${PLAY_DISPENSER_PUBLIC_URL:-${BASE_URL%/}/play-dispenser}
+setenv PLAY_BRIDGE_API_KEY "$PLAY_BRIDGE_API_KEY"
+setenv PLAY_DISPENSER_DB_PASSWORD "$PLAY_DISPENSER_DB_PASSWORD"
+setenv PLAY_DISPENSER_ENCRYPTION_KEY "$PLAY_DISPENSER_ENCRYPTION_KEY"
+setenv PLAY_DISPENSER_PUBLIC_URL "$PLAY_DISPENSER_PUBLIC_URL"
+setenv PLAY_STORE_ENABLED "${PLAY_STORE_ENABLED:-false}"
+export PLAY_BRIDGE_API_KEY PLAY_DISPENSER_DB_PASSWORD PLAY_DISPENSER_ENCRYPTION_KEY
+export PLAY_DISPENSER_PUBLIC_URL PLAY_STORE_ENABLED
+
 # The supervisor polls this repo's GitHub Releases (updater + the verified agent-APK mirror behind
 # /files/agent.apk). Detect owner/repo from the git remote when not already configured — exactly
 # like the native installer — and persist it so the supervisor container sees it.

@@ -50,6 +50,12 @@
 		reverse_proxy supervisor:9000
 	}
 
+	# Phone-facing API for the optional private Play account dispenser. handle_path strips
+	# the prefix, so Authenticator can use https://mdm.example/play-dispenser as its server.
+	handle_path /play-dispenser/* {
+		reverse_proxy play-dispenser:8080
+	}
+
 	# Everything else is the single-page app.
 	handle {
 		root * /srv

@@ -25,7 +25,8 @@ from gplaydl.auth import ensure_auth
 
 DATA = Path(os.getenv("PLAY_BRIDGE_DATA", "/data"))
 API_KEY = os.getenv("PLAY_BRIDGE_API_KEY", "")
-DISPENSER = os.getenv("GPLAYDL_DISPENSER_URL") or None
+DISPENSER = os.getenv("GPLAYDL_DISPENSER_URL", "http://play-dispenser:8080").rstrip("/")
+DISPENSER_KEY_FILE = DATA / "dispenser-api-key"
 ARCH = os.getenv("PLAY_DEVICE_ARCH", "arm64")
 LOCALE = os.getenv("PLAY_DEVICE_LOCALE", "en-US")
 MAX_BYTES = int(os.getenv("PLAY_MAX_ARTIFACT_BYTES", str(500 * 1024 * 1024)))
@@ -40,10 +41,50 @@ def package_lock(package: str) -> threading.Lock:
 
 
 def auth() -> dict:
+    key = dispenser_key()
+    if not key:
+        raise RuntimeError("No private Play account has been paired")
+    # gplaydl reads this at request time and sends it only to DISPENSER.
+    os.environ["GPLAYDL_API_KEY"] = key
     result = ensure_auth(arch=ARCH, dispenser_url=DISPENSER)
     if not result:
         raise RuntimeError("No Google Play account is linked to the dispenser")
     return result
+
+
+def dispenser_key() -> str:
+    configured = os.getenv("GPLAYDL_API_KEY", "").strip()
+    if configured:
+        return configured
+    try:
+        return DISPENSER_KEY_FILE.read_text().strip()
+    except OSError:
+        return ""
+
+
+def claim_pairing_code(code: str) -> None:
+    normalized = re.sub(r"[\s-]", "", code).upper()
+    if not re.fullmatch(r"[A-HJ-NP-Z2-9]{8}", normalized):
+        raise ValueError("Pairing code must contain 8 letters or digits")
+    response = httpx.post(
+        DISPENSER + "/api/v1/pair/claim-cli",
+        json={"code": normalized, "label": "MDMesh Play Bridge"},
+        timeout=30,
+    )
+    if response.status_code != 200:
+        try:
+            message = response.json().get("error", "Pairing failed")
+        except Exception:
+            message = "Pairing failed"
+        raise ValueError(message)
+    key = response.json().get("apiKey", "").strip()
+    if not key:
+        raise ValueError("Dispenser returned no API key")
+    temporary = DISPENSER_KEY_FILE.with_suffix(".tmp")
+    temporary.write_text(key)
+    os.chmod(temporary, 0o600)
+    temporary.replace(DISPENSER_KEY_FILE)
+    os.environ["GPLAYDL_API_KEY"] = key
 
 
 def digest(path: Path) -> str:
@@ -138,7 +179,9 @@ class Handler(BaseHTTPRequestHandler):
         parts = [urllib.parse.unquote(item) for item in parsed.path.split("/") if item]
         try:
             if parts == ["v1", "health"]:
-                return self.json(200, {"ok": True, "message": "Play Bridge is ready."})
+                linked = bool(dispenser_key())
+                return self.json(200, {"ok": True, "linked": linked,
+                                       "message": "Play account is linked." if linked else "Pair a private Play account."})
             if parts == ["v1", "search"]:
                 query = urllib.parse.parse_qs(parsed.query).get("q", [""])[0].strip()
                 limit = min(60, max(1, int(urllib.parse.parse_qs(parsed.query).get("limit", [30])[0])))
@@ -169,6 +212,23 @@ class Handler(BaseHTTPRequestHandler):
                     shutil.copyfileobj(stream, self.wfile, 64 * 1024)
                 return
             return self.json(404, {"error": "not_found"})
+        except ValueError as error:
+            return self.json(400, {"error": str(error)})
+        except Exception as error:
+            return self.json(503, {"error": type(error).__name__, "message": str(error)[:300]})
+
+    def do_POST(self) -> None:
+        if not API_KEY or self.headers.get("Authorization") != f"Bearer {API_KEY}":
+            return self.json(401, {"error": "unauthorized"})
+        if urllib.parse.urlparse(self.path).path != "/v1/pair":
+            return self.json(404, {"error": "not_found"})
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if length < 1 or length > 1024:
+                raise ValueError("Invalid pairing request")
+            body = json.loads(self.rfile.read(length))
+            claim_pairing_code(str(body.get("code", "")))
+            return self.json(200, {"linked": True, "message": "Private Play account linked."})
         except ValueError as error:
             return self.json(400, {"error": str(error)})
         except Exception as error:
