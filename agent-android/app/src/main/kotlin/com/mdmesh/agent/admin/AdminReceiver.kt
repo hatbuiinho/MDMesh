@@ -31,6 +31,7 @@ class AdminReceiver : DeviceAdminReceiver() {
         setStableOrganizationId(context)
         grantLocationAccess(context)
         protectAgentProcess(context)
+        enforceFactoryResetRestriction(context)
         CheckInWorker.schedule(context)
     }
 
@@ -41,6 +42,7 @@ class AdminReceiver : DeviceAdminReceiver() {
         setStableOrganizationId(context)
         grantLocationAccess(context)
         protectAgentProcess(context)
+        enforceFactoryResetRestriction(context)
         // Capture the server URL from the QR bundle BEFORE any check-in, so one prebuilt APK can
         // serve any deployment (it falls back to the baked URL only when absent — dev/ADB).
         ServerConfigStore(context.applicationContext).save(extrasString(intent, EXTRA_SERVER_URL))
@@ -180,5 +182,22 @@ class AdminReceiver : DeviceAdminReceiver() {
         /** This agent's admin component, used wherever a [ComponentName] is needed. */
         fun componentName(context: Context): ComponentName =
             ComponentName(context.applicationContext, AdminReceiver::class.java)
+
+        /**
+         * Prevent a local user from factory-resetting the managed device through Settings.
+         *
+         * This does not block the Device Owner itself: the server-side `device.wipe` command can
+         * still call DevicePolicyManager.wipeDevice/wipeData. Re-applying is harmless and lets
+         * boot/package-replaced paths repair policy drift without network access.
+         */
+        fun enforceFactoryResetRestriction(context: Context) {
+            runCatching {
+                val appContext = context.applicationContext
+                val dpm = appContext.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
+                    ?: return
+                if (!dpm.isDeviceOwnerApp(appContext.packageName)) return
+                dpm.addUserRestriction(componentName(appContext), UserManager.DISALLOW_FACTORY_RESET)
+            }
+        }
     }
 }

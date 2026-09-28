@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
+import com.mdmesh.agent.admin.AdminReceiver
 import com.mdmesh.core.sync.CheckInWorker
 import com.mdmesh.core.sync.ConfigReapplyWorker
 import com.mdmesh.core.telemetry.EventLog
@@ -23,6 +24,9 @@ class BootReceiver : BroadcastReceiver() {
             Intent.ACTION_BOOT_COMPLETED,
             "android.intent.action.LOCKED_BOOT_COMPLETED",
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                // Keep local Settings factory reset unavailable. The authenticated server-side
+                // device.wipe command remains able to reset the device as Device Owner.
+                AdminReceiver.enforceFactoryResetRestriction(context)
                 // Re-assert the persisted desired state first (works offline); the check-in below reconciles any drift.
                 runCatching { ConfigReapplyWorker.scheduleNow(context) }
                 // Enqueue a check-in via WorkManager FIRST: this reliably runs from the background

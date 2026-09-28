@@ -3,11 +3,14 @@ package com.mdmesh.core.sync
 import com.mdmesh.core.command.CommandDispatcher
 import com.mdmesh.core.command.CommandHandler
 import com.mdmesh.core.command.CommandResults
+import com.mdmesh.core.net.ResponseEnvelope
+import com.mdmesh.core.usage.AppUsageManager
+import com.mdmesh.core.usage.UnsupportedAppUsageManager
 import com.mdmesh.proto.AgentCheckInResponse
+import com.mdmesh.proto.AppUsageDailyReport
 import com.mdmesh.proto.CommandEnvelope
 import com.mdmesh.proto.CommandResult
 import com.mdmesh.proto.CommandStatus
-import com.mdmesh.core.net.ResponseEnvelope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
@@ -32,6 +35,7 @@ class CheckInCoordinatorTest {
         pending: PendingResults,
         identityId: String = "dev-1",
         syncStatus: SyncStatus = SyncStatus(),
+        appUsage: AppUsageManager = UnsupportedAppUsageManager,
     ): CheckInCoordinator {
         val identity = FakeIdentity(initialId = identityId, initialSecret = "sek-1")
         val eventSink = object : com.mdmesh.core.telemetry.EventSink {
@@ -51,6 +55,7 @@ class CheckInCoordinatorTest {
             telemetrySource = { null },
             eventSink = eventSink,
             syncStatus = syncStatus,
+            appUsage = appUsage,
         )
     }
 
@@ -95,6 +100,25 @@ class CheckInCoordinatorTest {
         assertEquals(1, sent.size)
         assertEquals("old", sent.first().commandId)
         assertTrue("buffer emptied after successful delivery", pending.drain().isEmpty())
+    }
+
+    @Test
+    fun `includes app usage aggregates in check-in`() = runTest {
+        val api = FakeMdmApi()
+        val report = AppUsageDailyReport(
+            packageName = "com.example.video",
+            usageDate = "2026-09-28",
+            foregroundMs = 12_000,
+            status = "allowed",
+        )
+        val appUsage = object : AppUsageManager {
+            override fun apply(policy: com.mdmesh.proto.AppUsagePolicy?) = "applied"
+            override fun evaluateAndReport() = listOf(report)
+        }
+
+        coordinator(api, PendingResults(), appUsage = appUsage).runOnce()
+
+        assertEquals(listOf(report), api.checkInRequests.single().appUsage)
     }
 
     @Test

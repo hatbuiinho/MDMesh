@@ -49,6 +49,7 @@ class AdminPolicyComplianceActivity : Activity() {
         // ever run against the baked fallback. save() is a no-op for an absent/blank extra.
         ServerConfigStore(ctx).save(extrasString(AdminReceiver.EXTRA_SERVER_URL))
         applyBaselinePolicy(ctx)
+        AdminReceiver.enforceFactoryResetRestriction(ctx)
 
         openedSettings = savedInstanceState?.getBoolean(STATE_OPENED_SETTINGS) == true
         setContentView(buildMandatoryUsageAccessView())
