@@ -2,7 +2,8 @@ import type { ConfigSyncSummary } from '../api/configSync';
 
 /** "N of M in sync" for one configuration, same visual language as the rollout cohort bar. */
 export function SyncBar({ s }: { s: ConfigSyncSummary | undefined }) {
-  if (!s || s.total === 0) return <div className="cfg-sync muted">No devices</div>;
+  if (!s) return <div className="cfg-sync muted">Loading device status…</div>;
+  if (s.total === 0) return <div className="cfg-sync muted">No devices</div>;
   const pct = Math.round((s.inSync / s.total) * 100);
   const extras = [
     s.outOfSync > 0 ? `${s.outOfSync} applying` : null,

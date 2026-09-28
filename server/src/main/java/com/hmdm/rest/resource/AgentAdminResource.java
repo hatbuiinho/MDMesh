@@ -56,6 +56,7 @@ import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -347,22 +348,33 @@ public class AgentAdminResource {
         Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
         if (!customerId.isPresent()) return Response.PERMISSION_DENIED();
         Map<Integer, String> revisionByConfig = new HashMap<>();
+        Set<Integer> revisionResolved = new HashSet<>();
         Map<Integer, ConfigSyncSummary> out = new LinkedHashMap<>();
         for (DeviceSyncRow row : commandDAO.listDevicesForSync(customerId.get())) {
             Integer cfgId = row.getConfigurationId();
             ConfigSyncSummary s = out.computeIfAbsent(cfgId, id -> { ConfigSyncSummary x = new ConfigSyncSummary(); x.setConfigurationId(id); return x; });
             s.setTotal(s.getTotal() + 1);
-            String current = revisionByConfig.computeIfAbsent(cfgId, id -> {
-                Device probe = new Device(); probe.setConfigurationId(id); probe.setCustomerId(customerId.get());
-                return configReconciler.currentRevision(probe);
-            });
+            String current = revisionByConfig.get(cfgId);
+            if (revisionResolved.add(cfgId)) {
+                try {
+                    Device probe = new Device();
+                    probe.setConfigurationId(cfgId);
+                    probe.setCustomerId(customerId.get());
+                    current = configReconciler.currentRevision(probe);
+                    revisionByConfig.put(cfgId, current);
+                } catch (Exception e) {
+                    // Device totals remain useful even when one malformed configuration cannot
+                    // currently produce a desired-state revision. Do not fail the whole summary.
+                    logger.warn("Could not calculate sync revision for configuration {}", cfgId, e);
+                }
+            }
             Set<String> tokens = AgentCapabilityTokens.flatten(row.getCapabilitiesJson());
             boolean supported = AgentCapabilityTokens.isAllowed(DesiredConfigBuilder.CAPABILITY, tokens);
             if (!supported) {
                 s.setUnsupported(s.getUnsupported() + 1);
             } else if (row.getAppliedConfigRevision() == null) {
                 s.setNeverSeen(s.getNeverSeen() + 1);
-            } else if (row.getAppliedConfigRevision().equals(current)) {
+            } else if (current != null && row.getAppliedConfigRevision().equals(current)) {
                 s.setInSync(s.getInSync() + 1);
             } else {
                 s.setOutOfSync(s.getOutOfSync() + 1);

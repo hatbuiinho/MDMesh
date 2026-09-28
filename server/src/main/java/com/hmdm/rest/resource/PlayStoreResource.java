@@ -25,6 +25,9 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.cert.X509Certificate;
 import java.util.*;
@@ -168,7 +171,7 @@ public class PlayStoreResource {
                 }
                 String hash = sha256(temp);
                 String fileName = request.packageName + "-" + hash + ".apk";
-                String url = host(temp, fileName, customer);
+                String url = host(temp, fileName, hash, customer);
                 temporary.remove(temp);
                 Map<String, Object> part = new LinkedHashMap<>();
                 part.put("url", url); part.put("sha256", hash); part.put("name", fileName);
@@ -209,6 +212,10 @@ public class PlayStoreResource {
                 sink.write(buffer, 0, n);
             }
         } finally { connection.disconnect(); }
+        if (total == 0 || (declared >= 0 && declared != total)) {
+            out.delete();
+            throw new BridgeException("error.play.invalidApk");
+        }
         return out;
     }
 
@@ -249,14 +256,41 @@ public class PlayStoreResource {
         return connection;
     }
 
-    private String host(File temp, String fileName, Customer customer) throws Exception {
+    private String host(File temp, String fileName, String expectedHash, Customer customer) throws Exception {
         File destination = FileUtil.resolveFile(customer, filesDirectory, null, fileName);
-        if (destination.exists()) temp.delete();
-        else if (FileUtil.moveFile(customer, filesDirectory, null, temp.getAbsolutePath(), fileName) == null)
-            throw new IOException("Could not host artifact");
+        if (validArtifact(destination, expectedHash)) {
+            temp.delete();
+        } else {
+            File parent = destination.getParentFile();
+            if (!parent.isDirectory() && !parent.mkdirs()) throw new IOException("Could not create artifact directory");
+            File staged = new File(parent, "." + fileName + "." + UUID.randomUUID() + ".part");
+            try {
+                Files.copy(temp.toPath(), staged.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                if (!validArtifact(staged, expectedHash)) throw new IOException("Artifact checksum mismatch after copy");
+                try {
+                    Files.move(staged.toPath(), destination.toPath(), StandardCopyOption.ATOMIC_MOVE,
+                            StandardCopyOption.REPLACE_EXISTING);
+                } catch (AtomicMoveNotSupportedException e) {
+                    Files.move(staged.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                }
+                if (!validArtifact(destination, expectedHash)) throw new IOException("Hosted artifact checksum mismatch");
+            } finally {
+                staged.delete();
+                temp.delete();
+            }
+        }
         String prefix = customer.getFilesDir();
         return prefix == null || prefix.isEmpty() ? baseUrl + "/files/" + fileName
                 : baseUrl + "/files/" + prefix + "/" + fileName;
+    }
+
+    private static boolean validArtifact(File file, String expectedHash) {
+        if (!file.isFile() || file.length() <= 0) return false;
+        try {
+            return expectedHash.equalsIgnoreCase(sha256(file));
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private boolean enabled() { return "true".equalsIgnoreCase(env("PLAY_STORE_ENABLED")) && !bridgeUrl.isEmpty() && !bridgeKey.isEmpty(); }

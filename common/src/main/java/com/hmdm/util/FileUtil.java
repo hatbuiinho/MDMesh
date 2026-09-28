@@ -27,6 +27,8 @@ import com.hmdm.persistence.domain.Customer;
 import java.io.*;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 
 /**
  * <p>An utility class for managing the files on local file system.</p>
@@ -140,13 +142,15 @@ public final class FileUtil {
             // Try to copy and delete because rename can fail due to different file systems
             // For example, on Tomcat 9 renaming from /tmp to /var/lib/tomcat9/work will fail due to sandbox restrictions
             try {
-                FileInputStream inputStream = new FileInputStream(localFile);
-                writeToFile(inputStream, file.getAbsolutePath());
-                inputStream.close();
-                localFile.delete();
+                Files.copy(localFile.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                if (Files.size(file.toPath()) != Files.size(localFile.toPath())) {
+                    throw new IOException("Incomplete file copy to " + file.getAbsolutePath());
+                }
+                if (!localFile.delete()) localFile.deleteOnExit();
                 return file;
             } catch (Exception e) {
                 e.printStackTrace();
+                file.delete();
                 return null;
             }
         }

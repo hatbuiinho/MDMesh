@@ -234,6 +234,10 @@ function ConfigCard({
       <div className="cfg-meta">
         <span><span className="k">Main app</span><span className="v">{appName}</span></span>
         <span><span className="k">Apps</span><span className="v">{appCount}</span></span>
+        <span>
+          <span className="k">Devices</span>
+          <span className="v">{sync ? sync.total : '…'}</span>
+        </span>
       </div>
       <SyncBar s={sync} />
       <div className="cfg-actions">
