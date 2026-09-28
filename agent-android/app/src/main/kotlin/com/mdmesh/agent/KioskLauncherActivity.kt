@@ -83,6 +83,9 @@ class KioskLauncherActivity : ComponentActivity() {
         // it (counting the bounce so a crash loop trips the guard). Enter/exit transitions are
         // handled by the flow collector, not here.
         val p = active ?: return
+        // Some Android/OEM builds leave lock-task mode when the screen is locked. The persisted
+        // kiosk state is still active, so re-assert it whenever HOME resumes after unlock.
+        startLockTaskSafely()
         if (p.mode == "single") {
             crashGuard.registerFault()
             if (bailOnCrashLoop()) return

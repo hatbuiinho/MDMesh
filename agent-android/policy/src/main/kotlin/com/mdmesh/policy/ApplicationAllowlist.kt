@@ -24,7 +24,12 @@ object ApplicationAllowlistPlanner {
         managedHiddenPackages: Set<String>,
     ): ApplicationAllowlistPlan {
         val desiredHidden = if (enabled) {
-            launchablePackages - allowedPackages - protectedPackages
+            // A hidden package no longer appears in PackageManager's launcher query. Keep packages
+            // we previously hid in the desired set until they become allowed/protected (or the
+            // Android-backed implementation establishes that they were uninstalled). Without this
+            // union, the first full reconciliation after applyPackage() immediately restores the
+            // package it just hid.
+            (launchablePackages + managedHiddenPackages) - allowedPackages - protectedPackages
         } else {
             emptySet()
         }

@@ -37,11 +37,24 @@ class ApplicationAllowlistPlannerTest {
             launchablePackages = setOf("newlyAllowed", "stillBlocked", "externallyHidden"),
             allowedPackages = setOf("newlyAllowed"),
             protectedPackages = emptySet(),
-            managedHiddenPackages = setOf("newlyAllowed", "stillBlocked", "uninstalled"),
+            managedHiddenPackages = setOf("newlyAllowed", "stillBlocked"),
         )
         assertEquals(setOf("externallyHidden"), plan.hide)
-        assertEquals(setOf("newlyAllowed", "uninstalled"), plan.restore)
+        assertEquals(setOf("newlyAllowed"), plan.restore)
         assertEquals(setOf("stillBlocked"), plan.retainManaged)
+    }
+
+    @Test fun reconciliationDoesNotRestoreAHiddenDisallowedPackageMissingFromLauncherQuery() {
+        val plan = ApplicationAllowlistPlanner.plan(
+            enabled = true,
+            launchablePackages = emptySet(),
+            allowedPackages = emptySet(),
+            protectedPackages = emptySet(),
+            managedHiddenPackages = setOf("hiddenByMdmesh"),
+        )
+        assertEquals(emptySet<String>(), plan.hide)
+        assertEquals(emptySet<String>(), plan.restore)
+        assertEquals(setOf("hiddenByMdmesh"), plan.retainManaged)
     }
 
     @Test fun disablingRestoresEveryPackageManagedByMdmesh() {

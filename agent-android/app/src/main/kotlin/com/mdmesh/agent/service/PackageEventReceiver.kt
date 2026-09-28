@@ -43,6 +43,9 @@ class PackageEventReceiver : BroadcastReceiver() {
         // A newly installed launcher app must not remain usable until the next periodic check-in.
         // Removal also prunes the set of packages whose hidden state MDMesh owns.
         runCatching { ConfigReapplyWorker.scheduleNow(context) }
+        if (intent.action == Intent.ACTION_PACKAGE_ADDED && !replacing) {
+            runCatching { ConfigReapplyWorker.scheduleAfterPackageSettles(context) }
+        }
     }
 
     private companion object { const val TAG = "PackageEventReceiver" }

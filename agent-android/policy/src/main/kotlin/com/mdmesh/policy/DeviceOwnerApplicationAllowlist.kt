@@ -4,6 +4,7 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 
 /**
  * Reversible app allowlist for dedicated devices. It manages only launcher-visible packages and
@@ -21,6 +22,13 @@ class DeviceOwnerApplicationAllowlist(
         if (!dpm.isDeviceOwnerApp(context.packageName)) return ApplicationAllowlistResult(false)
 
         val managed = prefs.getStringSet(KEY_HIDDEN, emptySet()).orEmpty().toMutableSet()
+        // Older agents could forget ownership when Android rejected an unhide operation. While the
+        // policy is off, recover every package hidden by this device owner so those devices converge
+        // instead of remaining permanently hidden after the switch is cleared.
+        if (!enabled) managed.addAll(hiddenByThisAdminPackages())
+        // The pure planner deliberately retains packages already hidden by MDMesh because hidden
+        // apps disappear from launcher queries. Prune packages that really no longer exist here.
+        managed.removeAll { !isInstalled(it) }
         val plan = ApplicationAllowlistPlanner.plan(
             enabled = enabled,
             launchablePackages = launchablePackages(),
@@ -36,7 +44,17 @@ class DeviceOwnerApplicationAllowlist(
                 continue
             }
             runCatching { dpm.setApplicationHidden(admin, pkg, false) }
-                .onSuccess { managed.remove(pkg); restored++ }
+                .onSuccess { changed ->
+                    val stillHidden = runCatching {
+                        dpm.isApplicationHidden(admin, pkg)
+                    }.getOrDefault(!changed)
+                    if (!stillHidden) {
+                        managed.remove(pkg)
+                        restored++
+                    } else {
+                        skipped[pkg] = "Android refused to restore the package"
+                    }
+                }
                 .onFailure { skipped[pkg] = it.message ?: it.javaClass.simpleName }
         }
 
@@ -116,6 +134,15 @@ class DeviceOwnerApplicationAllowlist(
         ).mapNotNull { it.activityInfo?.packageName }.toSet()
     }.getOrDefault(emptySet())
 
+    private fun hiddenByThisAdminPackages(): Set<String> = runCatching {
+        @Suppress("DEPRECATION")
+        context.packageManager.getInstalledApplications(PackageManager.MATCH_UNINSTALLED_PACKAGES)
+            .asSequence()
+            .map { it.packageName }
+            .filter { pkg -> runCatching { dpm.isApplicationHidden(admin, pkg) }.getOrDefault(false) }
+            .toSet()
+    }.getOrDefault(emptySet())
+
     private fun protectedPackages(): Set<String> {
         val protected = linkedSetOf(context.packageName, SYSTEM_UI)
         runCatching {
@@ -127,11 +154,16 @@ class DeviceOwnerApplicationAllowlist(
         return protected
     }
 
-    private fun isInstalled(pkg: String): Boolean = runCatching {
-        @Suppress("DEPRECATION")
-        context.packageManager.getPackageInfo(pkg, 0)
-        true
-    }.getOrDefault(false)
+    private fun isInstalled(pkg: String): Boolean {
+        // Some PackageManager implementations omit a DPC-hidden package from ordinary lookups.
+        // DPM is authoritative for packages hidden by this administrator.
+        if (runCatching { dpm.isApplicationHidden(admin, pkg) }.getOrDefault(false)) return true
+        return runCatching {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(pkg, 0)
+            true
+        }.getOrDefault(false)
+    }
 
     private companion object {
         const val KEY_HIDDEN = "hidden_by_mdmesh"

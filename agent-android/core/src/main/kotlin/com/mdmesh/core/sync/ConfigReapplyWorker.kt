@@ -11,6 +11,7 @@ import androidx.work.WorkerParameters
 import com.mdmesh.core.config.ConfigApplier
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import java.util.concurrent.TimeUnit
 
 /**
  * After boot / self-update, re-assert the last fully-applied desired-state document BEFORE the first check-in,
@@ -36,5 +37,21 @@ class ConfigReapplyWorker @AssistedInject constructor(
                 "config-reapply", ExistingWorkPolicy.REPLACE, OneTimeWorkRequestBuilder<ConfigReapplyWorker>().build(),
             )
         }
+
+        /**
+         * PackageManager can briefly report an incomplete launcher inventory after PACKAGE_ADDED.
+         * Reconcile once more after it settles so a package missed by the synchronous fast path
+         * cannot remain usable until the next periodic check-in.
+         */
+        fun scheduleAfterPackageSettles(context: Context) {
+            val request = OneTimeWorkRequestBuilder<ConfigReapplyWorker>()
+                .setInitialDelay(PACKAGE_SETTLE_DELAY_SECONDS, TimeUnit.SECONDS)
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                "config-reapply-package-settle", ExistingWorkPolicy.REPLACE, request,
+            )
+        }
+
+        private const val PACKAGE_SETTLE_DELAY_SECONDS = 5L
     }
 }
