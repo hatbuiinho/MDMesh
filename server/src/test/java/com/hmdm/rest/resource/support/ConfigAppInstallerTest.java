@@ -54,4 +54,30 @@ public class ConfigAppInstallerTest {
         verify(wakeHub).wake("device-new", "commands");
         verify(wakeHub, never()).wake("device-satisfied", "commands");
     }
+
+    @Test
+    public void doesNotRetryAnApkRejectedByTheDeviceSdk() {
+        UnsecureDAO unsecureDAO = mock(UnsecureDAO.class);
+        AgentCommandDAO commandDAO = mock(AgentCommandDAO.class);
+        AgentWakeHub wakeHub = mock(AgentWakeHub.class);
+        ConfigAppInstaller installer = new ConfigAppInstaller(unsecureDAO, commandDAO, wakeHub);
+
+        Configuration configuration = new Configuration();
+        configuration.setCustomerId(7);
+        Application app = new Application();
+        app.setAction(1);
+        app.setPkg("com.example.too.new");
+        app.setVersionCode(99);
+        app.setUrl("https://mdm.example/apps/too-new.apk");
+        when(unsecureDAO.getConfigurationById(42)).thenReturn(configuration);
+        when(unsecureDAO.getPlainConfigurationApplications(7, 42))
+                .thenReturn(Collections.singletonList(app));
+        when(commandDAO.listDeviceNumbersByConfigurationId(42))
+                .thenReturn(Collections.singletonList("android-old"));
+        when(commandDAO.hasSdkIncompatibleMatching(eq("android-old"), anyString())).thenReturn(true);
+
+        assertEquals(0, installer.enqueueConfigAppsForConfiguration(42));
+        verify(commandDAO, never()).insert(any(AgentCommand.class));
+        verify(wakeHub, never()).wake(anyString(), anyString());
+    }
 }

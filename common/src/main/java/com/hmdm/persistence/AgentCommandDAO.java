@@ -93,6 +93,10 @@ public class AgentCommandDAO {
         mapper.expireStale(deviceNumber, now - pendingTtlMillis, now - deliveredTtlMillis, now);
     }
 
+    public boolean expireSupersededDeliveredInstalls(String deviceNumber, long now) {
+        return mapper.expireSupersededDeliveredInstalls(deviceNumber, now) > 0;
+    }
+
     /** Command lifecycle history for a device, newest first, created at/after {@code since}. */
     public List<AgentCommand> listHistory(String deviceNumber, long since, int limit) {
         return mapper.listHistory(deviceNumber, since, limit);
@@ -186,6 +190,10 @@ public class AgentCommandDAO {
     /** True if the same command is in flight or has already completed successfully. */
     public boolean hasSatisfiedOrOpenMatching(String deviceNumber, String type, String payload) {
         return mapper.countSatisfiedOrOpenMatching(deviceNumber, type, payload) > 0;
+    }
+
+    public boolean hasSdkIncompatibleMatching(String deviceNumber, String payload) {
+        return mapper.countSdkIncompatibleMatching(deviceNumber, payload) > 0;
     }
 
     /** The most recently created command of {@code type} for the device, or null if none exists. */

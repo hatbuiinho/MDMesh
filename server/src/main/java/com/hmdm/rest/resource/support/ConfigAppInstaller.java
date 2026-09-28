@@ -112,6 +112,9 @@ public class ConfigAppInstaller {
             }
             String payload = InstallPayloadBuilder.build(
                     app.getPkg().trim(), app.getVersionCode(), url, app.getParts());
+            // Retrying the exact APK cannot fix a min-SDK rejection. Suppress the automatic loop;
+            // selecting a newer/different app version changes the payload and permits a new try.
+            if (commandDAO.hasSdkIncompatibleMatching(deviceNumber, payload)) continue;
             // Configuration saves can happen repeatedly and event delivery is asynchronous. Do not
             // stack the same install while an identical command is already queued or in flight.
             if (skipAlreadyInstalledIntent

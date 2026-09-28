@@ -94,6 +94,20 @@ public interface AgentCommandMapper {
     void expireStale(@Param("deviceNumber") String deviceNumber, @Param("pendingCutoff") long pendingCutoff,
                      @Param("deliveredCutoff") long deliveredCutoff, @Param("now") long now);
 
+    /**
+     * A terminal result for a newer install proves the agent has advanced past older delivered
+     * installs. Their result was lost and they must not keep the device busy for the full lease.
+     */
+    @Update({"UPDATE agentCommand stale SET status = 'expired', " +
+            "detail = 'Superseded by a newer completed install command', completedAt = #{now} " +
+            "WHERE stale.deviceNumber = #{deviceNumber} AND stale.type = 'app.install' " +
+            "AND stale.status IN ('delivered','accepted') AND EXISTS (" +
+            "SELECT 1 FROM agentCommand newer WHERE newer.deviceNumber = stale.deviceNumber " +
+            "AND newer.type = 'app.install' AND newer.id > stale.id " +
+            "AND newer.status IN ('done','failed','unsupported'))"})
+    int expireSupersededDeliveredInstalls(@Param("deviceNumber") String deviceNumber,
+                                          @Param("now") long now);
+
     @Select({"SELECT * FROM agentCommand WHERE deviceNumber = #{deviceNumber} AND createdAt >= #{since} " +
             "ORDER BY id DESC LIMIT #{limit}"})
     List<AgentCommand> listHistory(@Param("deviceNumber") String deviceNumber,
@@ -113,6 +127,13 @@ public interface AgentCommandMapper {
             "AND payload = #{payload} AND status IN ('pending','delivered','accepted','done')"})
     int countSatisfiedOrOpenMatching(@Param("deviceNumber") String deviceNumber,
                                      @Param("type") String type, @Param("payload") String payload);
+
+    /** Exact app/version is permanently incompatible with this device's current Android SDK. */
+    @Select({"SELECT COUNT(*) FROM agentCommand WHERE deviceNumber = #{deviceNumber} " +
+            "AND type = 'app.install' AND payload = #{payload} AND status = 'failed' AND (" +
+            "detail LIKE '%INSTALL_FAILED_OLDER_SDK%' OR detail LIKE '%Requires newer sdk version%')"})
+    int countSdkIncompatibleMatching(@Param("deviceNumber") String deviceNumber,
+                                     @Param("payload") String payload);
 
     @Select({"SELECT * FROM agentCommand WHERE deviceNumber = #{deviceNumber} AND type = #{type} ORDER BY id DESC LIMIT 1"})
     AgentCommand findLatestOfType(@Param("deviceNumber") String deviceNumber, @Param("type") String type);

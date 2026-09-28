@@ -375,6 +375,10 @@ public class AgentResource {
         // leash (6 h): the device HAS them — a slow install on metered network must not be
         // expired out from under its own genuine result.
         commandDAO.expireStale(deviceNumber, 60L * 60L * 1000L, 6L * 60L * 60L * 1000L);
+        // If the agent has already completed a newer install, an older delivered install can no
+        // longer be genuinely in flight. Release the lost-result row before rollout arbitration so
+        // it cannot report the device as busy for six hours.
+        commandDAO.expireSupersededDeliveredInstalls(deviceNumber, System.currentTimeMillis());
         // Durable rollout intent survives command expiry and offline devices. Reconcile AFTER state
         // and results are persisted, BEFORE claiming commands; a successful self-update stops here.
         rolloutCoordinator.reconcile(device.getCustomerId(), deviceNumber);
