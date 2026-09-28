@@ -6,7 +6,7 @@ export function SyncBar({ s }: { s: ConfigSyncSummary | undefined }) {
   if (s.total === 0) return <div className="cfg-sync muted">No devices</div>;
   const pct = Math.round((s.inSync / s.total) * 100);
   const extras = [
-    s.outOfSync > 0 ? `${s.outOfSync} applying` : null,
+    s.outOfSync > 0 ? `${s.outOfSync} out of sync` : null,
     s.neverSeen > 0 ? `${s.neverSeen} not reported` : null,
     s.unsupported > 0 ? `${s.unsupported} too old` : null,
   ].filter(Boolean).join(' · ');

@@ -55,8 +55,6 @@ import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -335,7 +333,18 @@ public class AgentAdminResource {
         boolean supported = AgentCapabilityTokens.isAllowed(DesiredConfigBuilder.CAPABILITY, tokens);
         v.setSupported(supported);
         v.setInSync(v.getCurrentRevision() != null && v.getCurrentRevision().equals(v.getAppliedRevision()));
-        v.setLastCommand(ConfigStatusView.LastCommand.from(commandDAO.findLatestOfType(deviceId, DesiredConfigBuilder.COMMAND_TYPE)));
+        ConfigStatusView.LastCommand last = ConfigStatusView.LastCommand.from(
+                commandDAO.findLatestOfType(deviceId, DesiredConfigBuilder.COMMAND_TYPE));
+        // A device that went offline after claiming config.apply otherwise appears as "Applying"
+        // forever. The command remains in history, but the status view must describe the effective
+        // state once its short idempotent-command lease is clearly stale.
+        if (last != null && ("pending".equals(last.getStatus()) || "delivered".equals(last.getStatus()))
+                && last.getCreatedAt() != null
+                && System.currentTimeMillis() - last.getCreatedAt() > 15L * 60L * 1000L) {
+            last.setStatus("expired");
+            if (last.getDetail() == null) last.setDetail("Device did not complete configuration apply");
+        }
+        v.setLastCommand(last);
         return Response.OK(v);
     }
 
@@ -347,26 +356,25 @@ public class AgentAdminResource {
     public Response getSyncSummary() {
         Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
         if (!customerId.isPresent()) return Response.PERMISSION_DENIED();
-        Map<Integer, String> revisionByConfig = new HashMap<>();
-        Set<Integer> revisionResolved = new HashSet<>();
         Map<Integer, ConfigSyncSummary> out = new LinkedHashMap<>();
         for (DeviceSyncRow row : commandDAO.listDevicesForSync(customerId.get())) {
             Integer cfgId = row.getConfigurationId();
             ConfigSyncSummary s = out.computeIfAbsent(cfgId, id -> { ConfigSyncSummary x = new ConfigSyncSummary(); x.setConfigurationId(id); return x; });
             s.setTotal(s.getTotal() + 1);
-            String current = revisionByConfig.get(cfgId);
-            if (revisionResolved.add(cfgId)) {
-                try {
-                    Device probe = new Device();
-                    probe.setConfigurationId(cfgId);
-                    probe.setCustomerId(customerId.get());
-                    current = configReconciler.currentRevision(probe);
-                    revisionByConfig.put(cfgId, current);
-                } catch (Exception e) {
-                    // Device totals remain useful even when one malformed configuration cannot
-                    // currently produce a desired-state revision. Do not fail the whole summary.
-                    logger.warn("Could not calculate sync revision for configuration {}", cfgId, e);
-                }
+            String current = null;
+            try {
+                // app-usage policy/overrides are device-specific, so two devices on the same
+                // configuration can legitimately have different desired revisions.
+                Device probe = new Device();
+                probe.setNumber(row.getDeviceNumber());
+                probe.setConfigurationId(cfgId);
+                probe.setCustomerId(customerId.get());
+                current = configReconciler.currentRevision(probe);
+            } catch (Exception e) {
+                // Device totals remain useful even when one malformed desired state cannot produce
+                // a revision. Do not fail the whole configuration summary.
+                logger.warn("Could not calculate sync revision for device {} (configuration {})",
+                        row.getDeviceNumber(), cfgId, e);
             }
             Set<String> tokens = AgentCapabilityTokens.flatten(row.getCapabilitiesJson());
             boolean supported = AgentCapabilityTokens.isAllowed(DesiredConfigBuilder.CAPABILITY, tokens);

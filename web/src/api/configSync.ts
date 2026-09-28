@@ -39,7 +39,8 @@ export function summarizeStatus(s: ConfigStatus | null): { tone: 'ok' | 'warn' |
   if (!s.supported) return { tone: 'warn', label: 'Agent too old' };
   if (s.inSync) return { tone: 'ok', label: 'In sync' };
   const st = s.lastCommand?.status;
-  if (st === 'pending' || st === 'delivered') return { tone: 'warn', label: 'Applying…' };
+  if (st === 'pending') return { tone: 'warn', label: 'Queued' };
+  if (st === 'delivered') return { tone: 'warn', label: 'Applying…' };
   if (st === 'failed') return { tone: 'alert', label: 'Apply failed' };
   if (!s.appliedRevision) return { tone: 'idle', label: 'Not reported yet' };
   return { tone: 'warn', label: 'Out of sync' };
