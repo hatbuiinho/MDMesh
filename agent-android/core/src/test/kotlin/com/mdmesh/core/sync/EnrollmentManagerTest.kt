@@ -17,7 +17,15 @@ class EnrollmentManagerTest {
         identity: FakeIdentity,
         api: FakeMdmApi = FakeMdmApi(),
         token: String? = "tok-123",
-    ) = EnrollmentManager(api, identity, FakeTokenProvider(token), FakeCapabilitySource(), NoopEventSink)
+        prerequisite: EnrollmentPrerequisite = EnrollmentPrerequisite.ALLOW,
+    ) = EnrollmentManager(
+        api,
+        identity,
+        FakeTokenProvider(token),
+        FakeCapabilitySource(),
+        NoopEventSink,
+        prerequisite = prerequisite,
+    )
 
     @Test
     fun `returns stored id without contacting server when already enrolled`() = runTest {
@@ -65,6 +73,23 @@ class EnrollmentManagerTest {
             fail("expected EnrollmentException")
         } catch (e: EnrollmentException) {
             assertTrue(e.message!!.contains("token"))
+        }
+    }
+
+    @Test
+    fun `does not consume enrollment token while prerequisite is missing`() = runTest {
+        val api = FakeMdmApi()
+
+        try {
+            manager(
+                FakeIdentity(initialId = null),
+                api = api,
+                prerequisite = EnrollmentPrerequisite { false },
+            ).ensureEnrolled()
+            fail("expected EnrollmentException")
+        } catch (e: EnrollmentException) {
+            assertEquals("usage_access_required", e.message)
+            assertTrue("enroll API must not be called", api.enrollRequests.isEmpty())
         }
     }
 

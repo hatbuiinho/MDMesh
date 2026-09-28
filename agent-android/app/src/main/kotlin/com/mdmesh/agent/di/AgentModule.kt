@@ -39,6 +39,8 @@ import com.mdmesh.core.command.handlers.PolicyApplyHandler
 import com.mdmesh.core.device.AppInventoryCollector
 import com.mdmesh.core.device.HardwareIdCollector
 import com.mdmesh.core.sync.HardwareIdSource
+import com.mdmesh.core.sync.EnrollmentPrerequisite
+import com.mdmesh.agent.provisioning.UsageAccessGate
 import com.mdmesh.core.install.InstallManager
 import com.mdmesh.core.state.DeviceStateCollector
 import com.mdmesh.core.state.DeviceStateSource
@@ -154,6 +156,14 @@ object AgentModule {
     /** Stable, permission-free device id for enrollment de-duplication. */
     @Provides
     fun provideHardwareIdSource(collector: HardwareIdCollector): HardwareIdSource = collector
+
+    /** Usage telemetry is mandatory for newly enrolled devices. */
+    @Provides
+    fun provideEnrollmentPrerequisite(
+        @ApplicationContext context: Context,
+    ): EnrollmentPrerequisite = EnrollmentPrerequisite {
+        UsageAccessGate.isGranted(context)
+    }
 
     /** Expose the device-state collector behind its interface (keeps :core sync Android-free). */
     @Provides

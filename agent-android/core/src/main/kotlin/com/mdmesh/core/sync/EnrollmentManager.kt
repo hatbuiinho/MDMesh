@@ -31,6 +31,7 @@ class EnrollmentManager @Inject constructor(
     private val capabilitySource: CapabilitySource,
     private val eventSink: EventSink,
     private val hardwareIdSource: HardwareIdSource = HardwareIdSource { null },
+    private val prerequisite: EnrollmentPrerequisite = EnrollmentPrerequisite.ALLOW,
 ) {
 
     private val mutex = Mutex()
@@ -45,6 +46,13 @@ class EnrollmentManager @Inject constructor(
     }
 
     private suspend fun enroll(): String {
+        // Check before reading or posting the single-use token. Provisioning receivers and
+        // WorkManager may start concurrently with the compliance UI; neither may bypass the
+        // mandatory device-side setup step.
+        if (!prerequisite.isSatisfied()) {
+            throw EnrollmentException("usage_access_required")
+        }
+
         val token = tokenProvider.token()?.takeIf { it.isNotBlank() }
             ?: throw EnrollmentException("no enrollment token available")
 
