@@ -29,6 +29,7 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- Report location while parked/backgrounded (Android 10+); DO auto-grants it at provisioning. -->
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
 
     <!--
         Package visibility. A Device-Owner fleet agent legitimately manages arbitrary

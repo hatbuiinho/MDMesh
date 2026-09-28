@@ -22,6 +22,8 @@ data class AgentEnrollRequest(
     /** Stable, permission-free device id (enrollment-specific id / ANDROID_ID) so the server
      *  can recognise a re-enrolling physical device and flag duplicate rows. */
     val hardwareId: String? = null,
+    /** Aggregate-only usage data; raw foreground events remain on-device. */
+    val appUsage: List<AppUsageDailyReport> = emptyList(),
 )
 
 /**

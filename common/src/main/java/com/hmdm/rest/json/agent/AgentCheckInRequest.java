@@ -56,6 +56,9 @@ public class AgentCheckInRequest {
     /** Buffered lifecycle events flushed on this check-in. */
     private List<AgentTelemetryEvent> events;
 
+    /** Per-app daily aggregates; raw foreground events never leave the device. */
+    private List<AppUsageDailyReport> appUsage;
+
     public AgentCheckInRequest() {
     }
 }

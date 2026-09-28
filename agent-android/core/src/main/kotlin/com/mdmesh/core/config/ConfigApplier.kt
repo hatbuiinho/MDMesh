@@ -11,6 +11,8 @@ import com.mdmesh.proto.ConfigApplyResult
 import com.mdmesh.proto.ConfigOutcome
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import com.mdmesh.core.usage.AppUsageManager
+import com.mdmesh.core.usage.UnsupportedAppUsageManager
 
 /**
  * Converges the device to a desired-state document. Each present section is applied through the code that
@@ -31,6 +33,7 @@ class ConfigApplier(
     private val applicationAllowlist: ApplicationAllowlist = ApplicationAllowlist { _, _ ->
         com.mdmesh.policy.ApplicationAllowlistResult(false)
     },
+    private val appUsage: AppUsageManager = UnsupportedAppUsageManager,
 ) {
     private val mutex = Mutex()
 
@@ -54,6 +57,8 @@ class ConfigApplier(
             outcomes["location"] = runCatching { setLocationMode(loc.mode); ConfigOutcome.APPLIED }
                 .getOrElse { ConfigOutcome.failed(it.message ?: "location mode") }
         }
+        val usageOutcome = appUsage.apply(doc.appUsage)
+        if (doc.appUsage != null) outcomes["appUsage"] = usageOutcome
         val result = ConfigApplyResult(doc.revision, outcomes)
         if (succeeded(result)) store.save(doc)
         return result

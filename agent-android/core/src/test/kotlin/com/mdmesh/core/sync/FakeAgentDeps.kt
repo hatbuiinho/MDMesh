@@ -62,6 +62,7 @@ class FakeMdmApi : MdmApi {
         ResponseEnvelope(status = "OK", data = AgentEnrollResponse(deviceId = "srv-1", deviceSecret = "sek-1"))
     var checkInResponse: ResponseEnvelope<AgentCheckInResponse> =
         ResponseEnvelope(status = "OK", data = AgentCheckInResponse())
+    val checkInResponses = ArrayDeque<ResponseEnvelope<AgentCheckInResponse>>()
     var checkInThrows: Throwable? = null
 
     /** When set, calls suspend until the gate completes — lets tests hold a request in flight. */
@@ -86,6 +87,6 @@ class FakeMdmApi : MdmApi {
         checkInRequests += request
         checkInGate?.await()
         checkInThrows?.let { throw it }
-        return checkInResponse
+        return checkInResponses.removeFirstOrNull() ?: checkInResponse
     }
 }

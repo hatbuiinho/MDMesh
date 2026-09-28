@@ -20,6 +20,40 @@ data class ConfigApplyPayload(
     val kiosk: KioskApplyPayload? = null,
     val applications: ConfigApplications = ConfigApplications(),
     val location: ConfigLocation? = null,
+    val appUsage: AppUsagePolicy? = null,
+)
+
+@Serializable
+data class AppUsagePolicy(
+    val timezone: String = "UTC",
+    val rules: List<AppUsageRule> = emptyList(),
+    val overrides: List<AppUsageGrant> = emptyList(),
+)
+
+@Serializable
+data class AppUsageRule(
+    val id: Int? = null,
+    val packageName: String,
+    val dailyLimitMinutes: Int? = null,
+    val warningMinutes: Int = 5,
+    val action: String = "suspend",
+    val enabled: Boolean = true,
+    val allowedWindows: List<AppUsageWindow> = emptyList(),
+)
+
+@Serializable
+data class AppUsageWindow(val days: List<Int> = emptyList(), val from: String, val to: String)
+
+@Serializable
+data class AppUsageGrant(val packageName: String, val extraMinutes: Int, val expiresAt: Long)
+
+@Serializable
+data class AppUsageDailyReport(
+    val packageName: String,
+    val usageDate: String,
+    val foregroundMs: Long,
+    val limitReachedAt: Long? = null,
+    val status: String,
 )
 
 @Serializable

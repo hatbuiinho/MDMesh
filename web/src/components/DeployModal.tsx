@@ -45,6 +45,7 @@ export function DeployModal({
   const [runAfter, setRunAfter] = useState(false);
   const [filter, setFilter] = useState('');
   const [busy, setBusy] = useState(false);
+  const [queued, setQueued] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,6 +80,7 @@ export function DeployModal({
   async function pushNow() {
     if (picked.size === 0) return;
     setBusy(true);
+    setQueued(0);
     let ok = 0;
     let fail = 0;
     for (const num of picked) {
@@ -94,6 +96,8 @@ export function DeployModal({
         ok++;
       } catch {
         fail++;
+      } finally {
+        setQueued(ok + fail);
       }
     }
     setBusy(false);
@@ -245,7 +249,9 @@ export function DeployModal({
             disabled={busy || !canSubmit}
             onClick={() => void (tab === 'device' ? pushNow() : assignConfig())}
           >
-            {busy ? 'Deploying…' : tab === 'device' ? `Deploy to ${picked.size || ''}`.trim() : 'Assign'}
+            {busy
+              ? tab === 'device' ? `Queueing ${queued}/${picked.size}…` : 'Assigning…'
+              : tab === 'device' ? `Deploy to ${picked.size || ''}`.trim() : 'Assign'}
           </button>
         </div>
     </Modal>

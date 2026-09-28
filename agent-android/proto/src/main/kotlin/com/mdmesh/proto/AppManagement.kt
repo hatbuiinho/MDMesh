@@ -11,7 +11,8 @@ object AppManagement {
     /** Silent PackageInstaller install/upgrade as Device Owner (gates `app.install`). */
     const val SILENT_INSTALL = "silentInstall"
     const val APP_ALLOWLIST = "appAllowlist"
+    const val USAGE_LIMIT = "usageLimit"
 
     /** Keys (before the `app.` prefix) advertised in `capabilities.appManagement` when Device Owner. */
-    val DEVICE_OWNER_KEYS: List<String> = listOf(SILENT_INSTALL, APP_ALLOWLIST)
+    val DEVICE_OWNER_KEYS: List<String> = listOf(SILENT_INSTALL, APP_ALLOWLIST, USAGE_LIMIT)
 }

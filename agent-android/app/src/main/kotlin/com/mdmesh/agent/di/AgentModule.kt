@@ -54,6 +54,8 @@ import com.mdmesh.core.telemetry.IdentityCollector
 import com.mdmesh.core.telemetry.SecurityCollector
 import com.mdmesh.core.telemetry.TelemetryAssembler
 import com.mdmesh.core.telemetry.TelemetrySource
+import com.mdmesh.core.usage.AppUsageManager
+import com.mdmesh.core.usage.AndroidAppUsageManager
 import com.mdmesh.proto.AppManagement
 import com.mdmesh.proto.DeviceAction
 import com.mdmesh.kiosk.CrashLoopGuard
@@ -337,13 +339,21 @@ object AgentModule {
 
     @Provides
     @Singleton
+    fun provideAppUsageManager(
+        @ApplicationContext context: Context,
+        handle: DpmHandle,
+    ): AppUsageManager = AndroidAppUsageManager(context, handle.dpm, handle.admin)
+
+    @Provides
+    @Singleton
     fun provideConfigApplier(
         toggles: Map<String, @JvmSuppressWildcards TogglePolicy>,
         kiosk: KioskApplier,
         location: LocationModeStore,
         store: ConfigStateStore,
         applicationAllowlist: ApplicationAllowlist,
-    ): ConfigApplier = ConfigApplier(toggles, kiosk, location::set, store, applicationAllowlist)
+        appUsage: AppUsageManager,
+    ): ConfigApplier = ConfigApplier(toggles, kiosk, location::set, store, applicationAllowlist, appUsage)
 
     @Provides
     @IntoSet

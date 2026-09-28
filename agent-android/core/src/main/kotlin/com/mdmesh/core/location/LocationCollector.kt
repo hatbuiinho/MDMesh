@@ -6,9 +6,9 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
-import android.os.Build
-import android.os.CancellationSignal
 import androidx.core.content.ContextCompat
+import androidx.core.location.LocationManagerCompat
+import androidx.core.os.CancellationSignal
 import com.mdmesh.proto.LocationDto
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.CountDownLatch
@@ -20,7 +20,7 @@ import javax.inject.Singleton
 /**
  * Reads the device location for telemetry. Passive mode (default) returns the OS's freshest
  * last-known fix across providers — near-zero battery, no active GPS. Active mode requests one fresh
- * fix per call (API 30+) with a short timeout, falling back to last-known. Never throws; returns
+ * fix per call (backported through AndroidX) with a short timeout, falling back to last-known. Never throws; returns
  * null without a location permission, with location services off, or when no fix is available.
  */
 @Singleton
@@ -57,10 +57,15 @@ class LocationCollector @Inject constructor(
             .maxByOrNull { it.time }
     }.getOrNull()
 
-    /** A single fresh fix with a short timeout (API 30+ only); null on timeout/failure. */
+    /** A single fresh fix with a short timeout; null on timeout/failure.
+     *
+     * LocationManagerCompat uses LocationManager#getCurrentLocation on API 30+ and emulates it
+     * with requestSingleUpdate on older releases (including Android 9). The direct executor is
+     * intentional: collect() may run on the main thread, so posting the callback back to main and
+     * then blocking on the latch would deadlock until the timeout.
+     */
     @SuppressLint("MissingPermission") // gated by collect()'s hasPermission() check
     private fun currentFix(lm: LocationManager): Location? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
         val provider = when {
             lm.isProviderEnabled(LocationManager.GPS_PROVIDER) -> LocationManager.GPS_PROVIDER
             lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER) -> LocationManager.NETWORK_PROVIDER
@@ -70,7 +75,7 @@ class LocationCollector @Inject constructor(
             val latch = CountDownLatch(1)
             val ref = AtomicReference<Location?>()
             val cancel = CancellationSignal()
-            lm.getCurrentLocation(provider, cancel, context.mainExecutor) { loc ->
+            LocationManagerCompat.getCurrentLocation(lm, provider, cancel, { task -> task.run() }) { loc ->
                 ref.set(loc); latch.countDown()
             }
             if (!latch.await(FIX_TIMEOUT_SEC, TimeUnit.SECONDS)) {

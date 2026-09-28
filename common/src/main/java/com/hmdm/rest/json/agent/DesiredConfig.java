@@ -47,4 +47,5 @@ public class DesiredConfig {
     private DesiredKiosk kiosk;
     private DesiredApplications applications;
     private DesiredLocation location;
+    private DesiredAppUsage appUsage;
 }

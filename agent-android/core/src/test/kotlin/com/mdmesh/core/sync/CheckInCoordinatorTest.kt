@@ -58,26 +58,28 @@ class CheckInCoordinatorTest {
         CommandEnvelope(commandId = id, issuedAt = "2026-01-01T00:00:00Z", type = "test.cmd")
 
     @Test
-    fun `dispatches returned commands and buffers their results`() = runTest {
+    fun `dispatches returned commands and immediately flushes their results`() = runTest {
         val api = FakeMdmApi().apply {
-            checkInResponse = ResponseEnvelope(
+            checkInResponses.add(ResponseEnvelope(
                 status = "OK",
                 data = AgentCheckInResponse(commands = listOf(command("c1"))),
-            )
+            ))
         }
         val pending = PendingResults()
 
         coordinator(api, pending).runOnce()
 
-        assertEquals(1, api.checkInRequests.size)
+        assertEquals(2, api.checkInRequests.size)
         assertEquals("dev-1", api.checkInRequests.first().deviceId)
         assertEquals("must present the per-device secret as a bearer token", "Bearer sek-1", api.checkInAuth.first())
         assertTrue("first cycle sends no acks", api.checkInRequests.first().results.isEmpty())
-        // The dispatched command's result is buffered for the next cycle.
-        val buffered = pending.drain()
-        assertEquals(1, buffered.size)
-        assertEquals("c1", buffered.first().commandId)
-        assertEquals(CommandStatus.DONE, buffered.first().status)
+        // The immediate follow-up carries the command result instead of leaving the UI stale
+        // until the periodic check-in.
+        val sent = api.checkInRequests[1].results
+        assertEquals(1, sent.size)
+        assertEquals("c1", sent.first().commandId)
+        assertEquals(CommandStatus.DONE, sent.first().status)
+        assertTrue(pending.drain().isEmpty())
     }
 
     @Test

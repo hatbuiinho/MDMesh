@@ -9,6 +9,8 @@ import com.mdmesh.core.telemetry.EventSink
 import com.mdmesh.core.telemetry.TelemetrySource
 import com.mdmesh.proto.AgentCheckInRequest
 import com.mdmesh.proto.EventType
+import com.mdmesh.core.usage.AppUsageManager
+import com.mdmesh.core.usage.UnsupportedAppUsageManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -44,13 +46,19 @@ class CheckInCoordinator @Inject constructor(
     private val eventSink: EventSink,
     private val hardwareIdSource: HardwareIdSource = HardwareIdSource { null },
     private val syncStatus: SyncStatus = SyncStatus(),
+    private val appUsage: AppUsageManager = UnsupportedAppUsageManager,
 ) {
 
     private val mutex = Mutex()
 
     suspend fun runOnce(): Unit = mutex.withLock {
         try {
-            cycle()
+            // Commands are delivered in one response, while their ACKs and any resulting state
+            // (notably appliedConfigRevision) travel in the next request. Flush that follow-up
+            // immediately so the server/UI sees convergence now instead of at the next 15-minute
+            // WorkManager tick. Keep it bounded to one extra request: newly returned commands are
+            // buffered for the next wake rather than creating an unbounded sync loop.
+            if (cycle()) cycle()
             syncStatus.clear()
         } catch (t: Throwable) {
             if (t !is CancellationException) syncStatus.recordFailure(t)
@@ -58,7 +66,8 @@ class CheckInCoordinator @Inject constructor(
         }
     }
 
-    private suspend fun cycle() {
+    /** @return true when this response delivered commands whose results need a prompt flush. */
+    private suspend fun cycle(): Boolean {
         val deviceId = enrollment.ensureEnrolled()
         val authorization = "Bearer ${identity.secret().orEmpty()}"
         val matrix = capabilitySource.matrix(deviceId)
@@ -76,6 +85,7 @@ class CheckInCoordinator @Inject constructor(
                     telemetry = runCatching { telemetrySource.snapshot() }.getOrNull(),
                     events = bufferedEvents,
                     hardwareId = runCatching { hardwareIdSource.get() }.getOrNull(),
+                    appUsage = runCatching { appUsage.evaluateAndReport() }.getOrDefault(emptyList()),
                 ),
             )
         } catch (t: Throwable) {
@@ -95,6 +105,7 @@ class CheckInCoordinator @Inject constructor(
         pending.add(results)
         // Record each command outcome as a timeline event (flushed next cycle).
         results.forEach { eventSink.record(EventType.COMMAND_RESULT, "${it.commandId}:${it.status}") }
+        return results.isNotEmpty()
     }
 }
 

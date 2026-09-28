@@ -1,6 +1,7 @@
 package com.hmdm.rest.resource.support;
 
 import com.hmdm.persistence.AgentCommandDAO;
+import com.hmdm.persistence.AppUsageDAO;
 import com.hmdm.persistence.UnsecureDAO;
 import com.hmdm.persistence.domain.AgentCommand;
 import com.hmdm.persistence.domain.Application;
@@ -31,11 +32,13 @@ public class ConfigReconciler {
 
     private final UnsecureDAO unsecureDAO;
     private final AgentCommandDAO commandDAO;
+    private final AppUsageDAO appUsageDAO;
 
     @Inject
-    public ConfigReconciler(UnsecureDAO unsecureDAO, AgentCommandDAO commandDAO) {
+    public ConfigReconciler(UnsecureDAO unsecureDAO, AgentCommandDAO commandDAO, AppUsageDAO appUsageDAO) {
         this.unsecureDAO = unsecureDAO;
         this.commandDAO = commandDAO;
+        this.appUsageDAO = appUsageDAO;
     }
 
     /** The desired-state document for the device's configuration, or null when it has none. */
@@ -44,7 +47,10 @@ public class ConfigReconciler {
         Configuration cfg = unsecureDAO.getConfigurationById(device.getConfigurationId());
         if (cfg == null) return null;
         List<Application> apps = unsecureDAO.getPlainConfigurationAppsOptimized(cfg.getId());
-        return DesiredConfigBuilder.build(cfg, apps);
+        DesiredConfig doc = DesiredConfigBuilder.build(cfg, apps);
+        doc.setAppUsage(appUsageDAO.desiredForDevice(cfg.getId(), device.getNumber()));
+        doc.setRevision(DesiredConfigBuilder.revision(doc));
+        return doc;
     }
 
     public String currentRevision(Device device) {

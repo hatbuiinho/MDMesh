@@ -35,6 +35,7 @@ public final class DesiredConfigBuilder {
     public static final String COMMAND_TYPE = "config.apply";
     public static final String CAPABILITY = "device.configApply";
     public static final String APP_ALLOWLIST_CAPABILITY = "app.appAllowlist";
+    public static final String APP_USAGE_CAPABILITY = "app.usageLimit";
     public static final String POLICY_PREFIX = "policies.";
     public static final String KEY_KIOSK = "kiosk";
     public static final String KEY_LOCATION = "location";
@@ -175,6 +176,7 @@ public final class DesiredConfigBuilder {
     }
 
     public static String requiredCapability(DesiredConfig doc) {
+        if (doc != null && doc.getAppUsage() != null) return APP_USAGE_CAPABILITY;
         return doc != null && doc.getApplications() != null && doc.getApplications().isEnforceAllowlist()
                 ? APP_ALLOWLIST_CAPABILITY : CAPABILITY;
     }

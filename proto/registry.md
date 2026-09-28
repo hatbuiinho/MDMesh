@@ -25,6 +25,7 @@ with the agent's capability advertisement and the server's command catalog.
 |-----|---------|-------|
 | `silentInstall` | PackageInstaller silent install | Device Owner only |
 | `appAllowlist` | hide launcher-visible packages outside desired configuration | Device Owner only |
+| `usageLimit` | daily foreground quotas, allowed windows, and package suspension | Device Owner + Usage Access |
 | `silentUninstall` | silent uninstall | Device Owner only |
 | `splitApk` | split/.xapk install | |
 | `fdroidCatalog` | can pull from an F-Droid repo | for the APK browser/catalog feature |

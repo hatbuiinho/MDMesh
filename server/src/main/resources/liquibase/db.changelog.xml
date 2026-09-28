@@ -2901,4 +2901,35 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="26.09.28-app-usage-policy" author="mdmesh" context="common">
+        <comment>Per-configuration app time policies, aggregate device reports, and temporary administrator grants.</comment>
+        <sql>
+            CREATE TABLE appUsagePolicy (
+                id SERIAL PRIMARY KEY, configurationId INT NOT NULL REFERENCES configurations(id) ON DELETE CASCADE,
+                timezone VARCHAR(80) NOT NULL DEFAULT 'UTC', packageName VARCHAR(255) NOT NULL,
+                dailyLimitMinutes INT CHECK (dailyLimitMinutes IS NULL OR dailyLimitMinutes BETWEEN 1 AND 1440),
+                warningMinutes INT NOT NULL DEFAULT 5 CHECK (warningMinutes BETWEEN 0 AND 120),
+                action VARCHAR(20) NOT NULL DEFAULT 'suspend', enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                allowedWindows TEXT NOT NULL DEFAULT '[]', UNIQUE(configurationId, packageName)
+            );
+            CREATE TABLE deviceAppUsageDaily (
+                deviceNumber VARCHAR(255) NOT NULL REFERENCES devices(number) ON DELETE CASCADE,
+                packageName VARCHAR(255) NOT NULL, usageDate DATE NOT NULL, foregroundMs BIGINT NOT NULL DEFAULT 0,
+                limitReachedAt BIGINT, status VARCHAR(40), updatedAt BIGINT NOT NULL,
+                PRIMARY KEY(deviceNumber, packageName, usageDate)
+            );
+            CREATE INDEX ix_deviceAppUsageDaily_date ON deviceAppUsageDaily(usageDate, deviceNumber);
+            CREATE TABLE appUsageOverride (
+                deviceNumber VARCHAR(255) NOT NULL REFERENCES devices(number) ON DELETE CASCADE,
+                packageName VARCHAR(255) NOT NULL, extraMinutes INT NOT NULL CHECK(extraMinutes BETWEEN 1 AND 1440),
+                expiresAt BIGINT NOT NULL, createdAt BIGINT NOT NULL, PRIMARY KEY(deviceNumber, packageName)
+            );
+        </sql>
+        <rollback>
+            DROP TABLE appUsageOverride;
+            DROP TABLE deviceAppUsageDaily;
+            DROP TABLE appUsagePolicy;
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

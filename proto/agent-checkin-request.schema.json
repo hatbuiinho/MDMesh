@@ -13,6 +13,15 @@
       "type": "array",
       "description": "Acks for previously-delivered commands.",
       "items": { "$ref": "command-result.schema.json" }
+    },
+    "appUsage": {
+      "type": "array", "maxItems": 200,
+      "description": "Privacy-preserving daily aggregates; raw activity events never leave the device.",
+      "items": { "type": "object", "required": ["packageName", "usageDate", "foregroundMs", "status"], "properties": {
+        "packageName": { "type": "string" }, "usageDate": { "type": "string", "format": "date" },
+        "foregroundMs": { "type": "integer", "minimum": 0, "maximum": 86400000 },
+        "limitReachedAt": { "type": "integer" }, "status": { "type": "string" }
+      } }
     }
   }
 }

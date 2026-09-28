@@ -24,6 +24,7 @@ package com.hmdm.rest.resource;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hmdm.persistence.AgentCommandDAO;
+import com.hmdm.persistence.AppUsageDAO;
 import com.hmdm.persistence.AgentEnrollmentTokenDAO;
 import com.hmdm.persistence.UnsecureDAO;
 import com.hmdm.persistence.domain.AgentCommand;
@@ -31,6 +32,7 @@ import com.hmdm.persistence.domain.AgentEnrollmentToken;
 import com.hmdm.persistence.domain.Configuration;
 import com.hmdm.persistence.domain.Device;
 import com.hmdm.persistence.domain.DeviceState;
+import com.hmdm.persistence.domain.DeviceAppUsageDaily;
 import com.hmdm.rest.json.agent.AgentDeviceState;
 import com.hmdm.rest.json.Response;
 import com.hmdm.rest.json.agent.AgentCapabilities;
@@ -94,6 +96,7 @@ public class AgentResource {
     private AgentCommandDAO commandDAO;
     private com.hmdm.rest.resource.support.ConfigAppInstaller configAppInstaller;
     private com.hmdm.rest.resource.support.ConfigReconciler configReconciler;
+    private AppUsageDAO appUsageDAO;
 
     /**
      * <p>A constructor required by Swagger.</p>
@@ -107,13 +110,15 @@ public class AgentResource {
                          AgentCommandDAO commandDAO,
                          com.hmdm.rest.resource.support.ConfigAppInstaller configAppInstaller,
                          com.hmdm.rest.resource.support.ConfigReconciler configReconciler,
-                         com.hmdm.persistence.AgentRolloutCoordinator rolloutCoordinator) {
+                         com.hmdm.persistence.AgentRolloutCoordinator rolloutCoordinator,
+                         AppUsageDAO appUsageDAO) {
         this.unsecureDAO = unsecureDAO;
         this.tokenDAO = tokenDAO;
         this.commandDAO = commandDAO;
         this.configAppInstaller = configAppInstaller;
         this.configReconciler = configReconciler;
         this.rolloutCoordinator = rolloutCoordinator;
+        this.appUsageDAO = appUsageDAO;
     }
 
     // =================================================================================================================
@@ -317,6 +322,24 @@ public class AgentResource {
                     detail = detail.substring(0, MAX_EVENT_DETAIL_CHARS);
                 }
                 commandDAO.insertEvent(deviceNumber, e.getType(), ts, detail);
+            }
+        }
+
+        // Privacy-preserving usage ingestion: daily aggregates only. Bound rows and validate
+        // package/date/duration so even an authenticated compromised agent cannot amplify writes.
+        if (request.getAppUsage() != null) {
+            int count = 0;
+            for (com.hmdm.rest.json.agent.AppUsageDailyReport report : request.getAppUsage()) {
+                if (++count > 200) break;
+                if (report == null || report.getPackageName() == null || report.getUsageDate() == null
+                        || report.getForegroundMs() == null || report.getForegroundMs() < 0
+                        || report.getForegroundMs() > 86_400_000L
+                        || !report.getPackageName().matches("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+")) continue;
+                try { java.time.LocalDate.parse(report.getUsageDate()); } catch (Exception invalid) { continue; }
+                DeviceAppUsageDaily row = new DeviceAppUsageDaily();
+                row.setDeviceNumber(deviceNumber); row.setPackageName(report.getPackageName()); row.setUsageDate(report.getUsageDate());
+                row.setForegroundMs(report.getForegroundMs()); row.setLimitReachedAt(report.getLimitReachedAt());
+                row.setStatus(report.getStatus()); row.setUpdatedAt(System.currentTimeMillis()); appUsageDAO.upsert(row);
             }
         }
 

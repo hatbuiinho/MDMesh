@@ -31,8 +31,10 @@ services:
     volumes:
       - mdmeshdata:/opt/mdmesh
     networks:
-      - internal
-      - external
+      internal:
+        aliases:
+          - mdmesh-server-internal
+      external:
 
   play-bridge:
     profiles: ["playstore"]
@@ -52,6 +54,7 @@ services:
       - playdata:/data
     networks:
       - internal
+      - play-egress
 
   play-dispenser-db:
     profiles: ["playstore"]
@@ -94,6 +97,7 @@ services:
       retries: 12
     networks:
       - internal
+      - play-egress
 
   caddy:
     image: ghcr.io/${IMAGE_OWNER:-mdmesh-app}/mdmesh-web:${WEB_VERSION:-latest}
@@ -111,6 +115,7 @@ services:
     environment:
       SITE_ADDRESS: ":80"
       TRUSTED_PROXIES: private_ranges
+      MDM_SERVER_UPSTREAM: mdmesh-server-internal:8080
     volumes:
       - caddy_data:/data
       - caddy_config:/config
@@ -167,6 +172,9 @@ services:
 networks:
   internal:
     internal: true
+  # Play services need outbound access to Google's APIs. Keep this separate
+  # from the reverse-proxy network so their ports are not exposed to it.
+  play-egress:
   external:
     external: true
     name: ${EXTERNAL_NETWORK:-nginx_network}

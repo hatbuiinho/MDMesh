@@ -27,15 +27,29 @@
       }
     },
     "applications": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["enforceAllowlist", "allowedPackages"],
-      "properties": {
-        "enforceAllowlist": { "type": "boolean" },
-        "allowedPackages": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
-      },
+      "type": "object", "additionalProperties": false, "required": ["enforceAllowlist", "allowedPackages"],
+      "properties": { "enforceAllowlist": { "type": "boolean" }, "allowedPackages": { "type": "array", "items": { "type": "string" }, "uniqueItems": true } },
       "description": "When enabled, hide launchable packages outside this allowlist. Agent and platform-critical packages are protected automatically."
     },
-    "location": { "type": "object", "properties": { "mode": { "enum": ["passive", "active"] } } }
+    "location": { "type": "object", "properties": { "mode": { "enum": ["passive", "active"] } } },
+    "appUsage": {
+      "type": "object", "additionalProperties": false, "required": ["timezone", "rules"],
+      "properties": {
+        "timezone": { "type": "string", "description": "IANA time-zone ID" },
+        "rules": { "type": "array", "items": { "type": "object", "required": ["packageName", "action", "enabled", "allowedWindows"], "properties": {
+          "id": { "type": "integer" }, "packageName": { "type": "string" },
+          "dailyLimitMinutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
+          "warningMinutes": { "type": "integer", "minimum": 0, "maximum": 120 },
+          "action": { "const": "suspend" }, "enabled": { "type": "boolean" },
+          "allowedWindows": { "type": "array", "items": { "type": "object", "required": ["days", "from", "to"], "properties": {
+            "days": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 7 }, "minItems": 1, "uniqueItems": true },
+            "from": { "type": "string", "pattern": "^[0-2][0-9]:[0-5][0-9]$" }, "to": { "type": "string", "pattern": "^[0-2][0-9]:[0-5][0-9]$" }
+          } } }
+        } } },
+        "overrides": { "type": "array", "items": { "type": "object", "required": ["packageName", "extraMinutes", "expiresAt"], "properties": {
+          "packageName": { "type": "string" }, "extraMinutes": { "type": "integer", "minimum": 1 }, "expiresAt": { "type": "integer" }
+        } } }
+      }
+    }
   }
 }

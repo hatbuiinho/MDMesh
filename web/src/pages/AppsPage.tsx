@@ -3,6 +3,7 @@ import { AppShell } from '../ui/AppShell';
 import { useToast } from '../ui/toast';
 import {
   listApplications,
+  getAppConfigLinks,
   getVersions,
   uploadApk,
   uploadBundle,
@@ -74,6 +75,7 @@ export function AppsPage() {
   const toast = useToast();
   const [source, setSource] = useState<SourceId>('library');
   const [deploy, setDeploy] = useState<DeploySubject | null>(null);
+  const [libraryRevision, setLibraryRevision] = useState(0);
 
   return (
     <AppShell title="Apps">
@@ -111,14 +113,17 @@ export function AppsPage() {
       )}
       {source === 'custom' && <CustomSource onDeploy={setDeploy} />}
       {source === 'fdroid' && <FDroidSource onDeploy={setDeploy} />}
-      {source === 'play' && <PlayStoreSource onDeploy={setDeploy} />}
+      {source === 'play' && <PlayStoreSource onDeploy={setDeploy} libraryRevision={libraryRevision} />}
 
-      {deploy && <DeployModal subject={deploy} onClose={() => setDeploy(null)} />}
+      {deploy && <DeployModal subject={deploy} onClose={() => {
+        setDeploy(null);
+        setLibraryRevision((value) => value + 1);
+      }} />}
     </AppShell>
   );
 }
 
-function PlayStoreSource({ onDeploy }: { onDeploy: (s: DeploySubject) => void }) {
+function PlayStoreSource({ onDeploy, libraryRevision }: { onDeploy: (s: DeploySubject) => void; libraryRevision: number }) {
   const toast = useToast();
   const [status, setStatus] = useState<PlayStatus | null>(null);
   const [q, setQ] = useState('');
@@ -126,14 +131,43 @@ function PlayStoreSource({ onDeploy }: { onDeploy: (s: DeploySubject) => void })
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState<string | null>(null);
+  const [importStage, setImportStage] = useState<string | null>(null);
+  const [libraryApps, setLibraryApps] = useState<Map<string, Application>>(new Map());
+  const [assignedCounts, setAssignedCounts] = useState<Record<number, number>>({});
   const [pairingCode, setPairingCode] = useState('');
   const [pairing, setPairing] = useState(false);
+  const [showRelink, setShowRelink] = useState(false);
 
   useEffect(() => {
     getPlayStatus()
       .then(setStatus)
       .catch(() => setStatus({ enabled: false, available: false, profile: 'arm64-v8a', message: 'Could not read Play Store status.' }));
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    listApplications()
+      .then((list) => {
+        if (cancelled) return;
+        setLibraryApps(new Map(list.map((app) => [app.pkg, app])));
+      })
+      .catch(() => !cancelled && setLibraryApps(new Map()));
+    return () => { cancelled = true; };
+  }, [libraryRevision]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const visible = apps
+      .map((app) => libraryApps.get(app.packageName))
+      .filter((app): app is Application => app != null);
+    Promise.all(visible.map(async (app) => {
+      const links = await getAppConfigLinks(app.id).catch(() => []);
+      return [app.id, links.filter((link) => link.action === 1 && !link.remove).length] as const;
+    })).then((rows) => {
+      if (!cancelled) setAssignedCounts(Object.fromEntries(rows));
+    });
+    return () => { cancelled = true; };
+  }, [apps, libraryApps]);
 
   useEffect(() => {
     if (!status?.enabled || !status.available || q.trim().length < 2) {
@@ -159,9 +193,11 @@ function PlayStoreSource({ onDeploy }: { onDeploy: (s: DeploySubject) => void })
 
   async function importAndDeploy(app: PlayApp) {
     setImporting(app.packageName);
+    setImportStage('Downloading and verifying APK files…');
     setError(null);
     try {
       const imported = await importPlayApp(app.packageName);
+      setImportStage('Saving to Library…');
       const version = imported.version || String(imported.versionCode);
       let applicationId: number | undefined;
       try {
@@ -169,9 +205,12 @@ function PlayStoreSource({ onDeploy }: { onDeploy: (s: DeploySubject) => void })
           ? { name: imported.name, pkg: imported.packageName, url: imported.parts[0].url, version, versionCode: imported.versionCode, type: 'app' }
           : { name: imported.name, pkg: imported.packageName, version, versionCode: imported.versionCode, type: 'app', parts: JSON.stringify(imported.parts) });
         applicationId = saved.id;
+        setLibraryApps((current) => new Map(current).set(saved.pkg, saved));
       } catch {
-        applicationId = (await listApplications(imported.packageName).catch(() => []))
-          .find((item) => item.pkg === imported.packageName)?.id;
+        const saved = (await listApplications(imported.packageName).catch(() => []))
+          .find((item) => item.pkg === imported.packageName);
+        applicationId = saved?.id;
+        if (saved) setLibraryApps((current) => new Map(current).set(saved.pkg, saved));
       }
       toast.push('ok', 'Imported from Play Store', `${imported.name} is hosted in your Library.`);
       onDeploy({
@@ -189,6 +228,16 @@ function PlayStoreSource({ onDeploy }: { onDeploy: (s: DeploySubject) => void })
       toast.push('err', 'Play Store import failed', message);
     } finally {
       setImporting(null);
+      setImportStage(null);
+    }
+  }
+
+  async function deployFromLibrary(app: Application) {
+    setError(null);
+    try {
+      onDeploy(await resolveApp(app));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'This app could not be prepared for deployment.');
     }
   }
 
@@ -204,6 +253,7 @@ function PlayStoreSource({ onDeploy }: { onDeploy: (s: DeploySubject) => void })
       const next = await getPlayStatus();
       setStatus(next);
       setPairingCode('');
+      setShowRelink(false);
       toast.push('ok', 'Play account linked', 'Private Play Store search and import are ready.');
     } catch (e) {
       toast.push('err', 'Pairing failed', e instanceof Error ? e.message : 'The code may have expired.');
@@ -259,18 +309,35 @@ function PlayStoreSource({ onDeploy }: { onDeploy: (s: DeploySubject) => void })
           <input type="search" placeholder="Search by app name or package ID" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
         </div>
         <span className="play-connected"><i /> Private account connected</span>
+        <button className="btn btn-sm" onClick={() => setShowRelink((value) => !value)}>
+          {showRelink ? 'Cancel relink' : 'Relink account'}
+        </button>
       </div>
+      {showRelink && <div className="play-pair">
+        <label className="field"><span>New pairing code</span>
+          <input className="input mono" value={pairingCode} maxLength={9} placeholder="ABCD-EFGH" autoComplete="off" onChange={(e) => setPairingCode(e.target.value.toUpperCase())} />
+        </label>
+        <button className="btn btn-primary" disabled={pairing || pairingCode.trim().length < 8} onClick={pairAccount}>{pairing ? 'Linking…' : 'Replace linked account'}</button>
+        <span className="note">Generate a new code from gplaydl Authenticator after adding the Google account.</span>
+      </div>}
       {error && <div className="banner banner-alert">{error}</div>}
       {searching ? <div className="panel"><div className="empty"><span className="spin" /> Searching Play Store…</div></div>
         : q.trim().length < 2 ? <div className="play-empty"><div className="play-empty-mark" aria-hidden="true">▶</div><span className="label">Find apps on Google Play</span><p>Search free apps by name or paste an exact package ID.</p></div>
         : apps.length === 0 ? <div className="panel"><div className="empty"><span className="label">No results</span>No compatible apps matched your search.</div></div>
         : <div className="app-grid">{apps.map((app) => {
           const blocked = app.paid || app.compatible === false;
+          const libraryApp = libraryApps.get(app.packageName);
+          const assigned = libraryApp ? (assignedCounts[libraryApp.id] ?? 0) : 0;
           return <div className="app-card" key={app.packageName}>
             <div className="app-top"><AppIcon name={app.name} url={app.iconUrl} /><div className="app-meta"><div className="app-nm">{app.name}</div><div className="app-pkg mono">{app.packageName}</div></div></div>
             {app.summary && <div className="app-sum">{app.summary}</div>}
+            {libraryApp && <div className="play-app-state">
+              <span className="play-state-badge">In Library</span>
+              {assigned > 0 && <span className="play-state-badge">Assigned to {assigned} configuration{assigned === 1 ? '' : 's'}</span>}
+            </div>}
+            {importing === app.packageName && <div className="play-import-progress" role="status"><span className="spin" />{importStage}</div>}
             <div className="app-foot"><span className="app-ver">{app.paid ? 'Paid — unsupported' : app.compatible === false ? 'Incompatible' : app.versionName ? `v${app.versionName}` : 'Free'}</span>
-              <button className="btn btn-sm btn-primary" disabled={blocked || importing !== null} onClick={() => importAndDeploy(app)}>{importing === app.packageName ? 'Importing…' : 'Import & deploy'}</button>
+              <button className="btn btn-sm btn-primary" disabled={blocked || importing !== null} onClick={() => libraryApp ? void deployFromLibrary(libraryApp) : void importAndDeploy(app)}>{importing === app.packageName ? 'Importing…' : libraryApp ? 'Deploy' : 'Import'}</button>
             </div>
           </div>;
         })}</div>}

@@ -22,6 +22,7 @@ import { AppPicker } from '../components/AppPicker';
 import { SyncBar } from '../components/SyncBar';
 import { KioskChangeConfirm, kioskAffectingChanges } from '../components/KioskChangeConfirm';
 import { Modal } from '../ui/Modal';
+import { AppUsagePolicyEditor } from '../components/AppUsagePolicyEditor';
 
 // The seeded device-template defaults are locked: view-only, and used as bases
 // for new configs (start from scratch or from one of these).
@@ -527,6 +528,12 @@ function ConfigEditor({
             )}
           </div>
         ))}
+      </section>
+
+      <section className="panel cfg-panel">
+        <div className="cfg-sec-h">App usage limits</div>
+        <p className="note">Daily quotas and allowed time windows are enforced locally, including while devices are offline.</p>
+        <AppUsagePolicyEditor configurationId={initial.id} apps={allowed} readOnly={readOnly} />
       </section>
 
       <button className="cfg-adv-toggle" onClick={() => setAdvanced((v) => !v)}>
