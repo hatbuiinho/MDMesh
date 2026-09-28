@@ -178,6 +178,16 @@ public class AgentCommandDAO {
         return mapper.countOpenOfType(deviceNumber, type) > 0;
     }
 
+    /** True if the same command payload is already waiting or in flight for the device. */
+    public boolean hasOpenMatching(String deviceNumber, String type, String payload) {
+        return mapper.countOpenMatching(deviceNumber, type, payload) > 0;
+    }
+
+    /** True if the same command is in flight or has already completed successfully. */
+    public boolean hasSatisfiedOrOpenMatching(String deviceNumber, String type, String payload) {
+        return mapper.countSatisfiedOrOpenMatching(deviceNumber, type, payload) > 0;
+    }
+
     /** The most recently created command of {@code type} for the device, or null if none exists. */
     public AgentCommand findLatestOfType(String deviceNumber, String type) {
         return mapper.findLatestOfType(deviceNumber, type);

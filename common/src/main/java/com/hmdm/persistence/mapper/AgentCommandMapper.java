@@ -102,6 +102,18 @@ public interface AgentCommandMapper {
     @Select({"SELECT COUNT(*) FROM agentCommand WHERE deviceNumber = #{deviceNumber} AND type = #{type} AND status IN ('pending','delivered','accepted')"})
     int countOpenOfType(@Param("deviceNumber") String deviceNumber, @Param("type") String type);
 
+    /** Open command with the exact same intent. Used to make automatic app sync idempotent. */
+    @Select({"SELECT COUNT(*) FROM agentCommand WHERE deviceNumber = #{deviceNumber} AND type = #{type} " +
+            "AND payload = #{payload} AND status IN ('pending','delivered','accepted')"})
+    int countOpenMatching(@Param("deviceNumber") String deviceNumber, @Param("type") String type,
+                          @Param("payload") String payload);
+
+    /** Same intent is either already in flight or was successfully applied. */
+    @Select({"SELECT COUNT(*) FROM agentCommand WHERE deviceNumber = #{deviceNumber} AND type = #{type} " +
+            "AND payload = #{payload} AND status IN ('pending','delivered','accepted','done')"})
+    int countSatisfiedOrOpenMatching(@Param("deviceNumber") String deviceNumber,
+                                     @Param("type") String type, @Param("payload") String payload);
+
     @Select({"SELECT * FROM agentCommand WHERE deviceNumber = #{deviceNumber} AND type = #{type} ORDER BY id DESC LIMIT 1"})
     AgentCommand findLatestOfType(@Param("deviceNumber") String deviceNumber, @Param("type") String type);
 }

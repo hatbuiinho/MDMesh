@@ -16,6 +16,7 @@ import com.hmdm.persistence.AgentCommandDAO;
 import com.hmdm.persistence.UnsecureDAO;
 import com.hmdm.persistence.domain.AgentCommand;
 import com.hmdm.persistence.domain.Application;
+import com.hmdm.persistence.domain.Configuration;
 import com.hmdm.persistence.domain.Device;
 import com.hmdm.util.RolloutProgress;
 import org.slf4j.Logger;
@@ -58,37 +59,66 @@ public class ConfigAppInstaller {
         if (device == null || device.getConfigurationId() == null) {
             return 0;
         }
-        int queued = 0;
         try {
             List<Application> apps = unsecureDAO.getPlainConfigurationApplications(
                     device.getCustomerId(), device.getConfigurationId());
-            long now = System.currentTimeMillis();
-            for (Application app : apps) {
-                if (app == null || app.getAction() != ACTION_INSTALL) {
-                    continue;
-                }
-                String url = firstUsableUrl(app);
-                boolean hasParts = app.getParts() != null && !app.getParts().trim().isEmpty();
-                if ((url == null && !hasParts) || app.getPkg() == null || app.getPkg().trim().isEmpty()) {
-                    // Catalog placeholder / web app / seed leftover — nothing downloadable.
-                    continue;
-                }
-                AgentCommand cmd = new AgentCommand();
-                cmd.setDeviceNumber(device.getNumber());
-                cmd.setType("app.install");
-                cmd.setPayload(InstallPayloadBuilder.build(app.getPkg().trim(), app.getVersionCode(), url, app.getParts()));
-                cmd.setRequiresCapability(RolloutProgress.INSTALL_CAPABILITY);
-                cmd.setStatus("pending");
-                cmd.setCreatedAt(now);
-                commandDAO.insert(cmd);
-                queued++;
-            }
-            if (queued > 0) {
-                wakeHub.wake(device.getNumber(), "commands");
-            }
+            return enqueueApps(device.getNumber(), apps, false);
         } catch (Exception e) {
             logger.warn("Failed to queue configuration apps for device {}", device.getNumber(), e);
+            return 0;
         }
+    }
+
+    /**
+     * Queue install commands for every agent-v1 device currently assigned to a configuration.
+     * Called after a configuration save so adding/deploying an app converges existing devices too,
+     * rather than only devices enrolled after the edit.
+     */
+    public int enqueueConfigAppsForConfiguration(int configurationId) {
+        int queued = 0;
+        try {
+            Configuration configuration = unsecureDAO.getConfigurationById(configurationId);
+            if (configuration == null) return 0;
+            List<Application> apps = unsecureDAO.getPlainConfigurationApplications(
+                    configuration.getCustomerId(), configurationId);
+            for (String deviceNumber : commandDAO.listDeviceNumbersByConfigurationId(configurationId)) {
+                queued += enqueueApps(deviceNumber, apps, true);
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to queue apps after configuration {} update", configurationId, e);
+        }
+        return queued;
+    }
+
+    private int enqueueApps(String deviceNumber, List<Application> apps, boolean skipAlreadyInstalledIntent) {
+        int queued = 0;
+        long now = System.currentTimeMillis();
+        for (Application app : apps) {
+            if (app == null || app.getAction() != ACTION_INSTALL) continue;
+            String url = firstUsableUrl(app);
+            boolean hasParts = app.getParts() != null && !app.getParts().trim().isEmpty();
+            if ((url == null && !hasParts) || app.getPkg() == null || app.getPkg().trim().isEmpty()) {
+                // Catalog placeholder / web app / seed leftover — nothing downloadable.
+                continue;
+            }
+            String payload = InstallPayloadBuilder.build(
+                    app.getPkg().trim(), app.getVersionCode(), url, app.getParts());
+            // Configuration saves can happen repeatedly and event delivery is asynchronous. Do not
+            // stack the same install while an identical command is already queued or in flight.
+            if (skipAlreadyInstalledIntent
+                    ? commandDAO.hasSatisfiedOrOpenMatching(deviceNumber, "app.install", payload)
+                    : commandDAO.hasOpenMatching(deviceNumber, "app.install", payload)) continue;
+            AgentCommand cmd = new AgentCommand();
+            cmd.setDeviceNumber(deviceNumber);
+            cmd.setType("app.install");
+            cmd.setPayload(payload);
+            cmd.setRequiresCapability(RolloutProgress.INSTALL_CAPABILITY);
+            cmd.setStatus("pending");
+            cmd.setCreatedAt(now);
+            commandDAO.insert(cmd);
+            queued++;
+        }
+        if (queued > 0) wakeHub.wake(deviceNumber, "commands");
         return queued;
     }
 

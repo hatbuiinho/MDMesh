@@ -14,13 +14,14 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Configuration saved → nudge its agent-v1 devices to check in now. Reconciliation itself happens in the
- * check-in (single code path); this only shortens the wait from the 15-min floor to seconds.
+ * Configuration saved → queue newly desired app installs and nudge its agent-v1 devices to check in now.
+ * Configuration reconciliation itself still happens in the check-in (single code path).
  */
 public class AgentConfigUpdatedListener implements EventListener<ConfigurationUpdatedEvent> {
     private static final Logger logger = LoggerFactory.getLogger(AgentConfigUpdatedListener.class);
     private final AgentCommandDAO commandDAO;
     private final AgentWakeHub wakeHub;
+    private final ConfigAppInstaller configAppInstaller;
 
     /**
      * {@code ConfigurationDAO.updateConfiguration} fires the event INSIDE its {@code @Transactional} method and
@@ -37,9 +38,11 @@ public class AgentConfigUpdatedListener implements EventListener<ConfigurationUp
                 return t;
             }));
 
-    public AgentConfigUpdatedListener(AgentCommandDAO commandDAO, AgentWakeHub wakeHub) {
+    public AgentConfigUpdatedListener(AgentCommandDAO commandDAO, AgentWakeHub wakeHub,
+                                      ConfigAppInstaller configAppInstaller) {
         this.commandDAO = commandDAO;
         this.wakeHub = wakeHub;
+        this.configAppInstaller = configAppInstaller;
     }
 
     @Override
@@ -54,6 +57,9 @@ public class AgentConfigUpdatedListener implements EventListener<ConfigurationUp
 
     private void wakeDevices(ConfigurationUpdatedEvent event) {
         try {
+            int queued = configAppInstaller.enqueueConfigAppsForConfiguration(event.getConfigurationId());
+            logger.info("configuration {} updated: {} app.install commands queued",
+                    event.getConfigurationId(), queued);
             for (String number : commandDAO.listDeviceNumbersByConfigurationId(event.getConfigurationId())) {
                 wakeHub.wake(number, "commands");
             }

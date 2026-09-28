@@ -85,7 +85,8 @@ public interface AgentDeviceMapper {
     List<DeviceLocation> listLocations(@Param("deviceNumber") String deviceNumber,
                                        @Param("since") long since, @Param("limit") int limit);
 
-    @Select({"SELECT number FROM devices WHERE configurationId = #{configurationId}"})
+    @Select({"SELECT number FROM devices WHERE configurationId = #{configurationId} " +
+            "AND agentSecretHash IS NOT NULL"})
     List<String> listDeviceNumbersByConfigurationId(@Param("configurationId") int configurationId);
 
     /** One row per device of the customer with its configuration + last applied revision (LEFT JOIN: never-reported devices included). */
