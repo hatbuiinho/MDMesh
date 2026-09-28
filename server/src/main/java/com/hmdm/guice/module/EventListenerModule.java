@@ -78,6 +78,12 @@ public class EventListenerModule {
                 agentCommandDAO, wakeHub, configAppInstaller));
 
         executorService.submit(() -> {
+            try {
+                int queued = configAppInstaller.enqueueAllAssignedConfigApps();
+                logger.info("Startup configuration app backfill queued {} app.install commands", queued);
+            } catch (Exception e) {
+                logger.warn("Startup configuration app backfill failed", e);
+            }
             List<Integer> deviceIds = this.deviceMapper.getAllDeviceIds();
             deviceIds.forEach(deviceId -> {
                 try {

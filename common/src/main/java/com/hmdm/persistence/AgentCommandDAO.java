@@ -198,6 +198,10 @@ public class AgentCommandDAO {
         return deviceMapper.listDeviceNumbersByConfigurationId(configurationId);
     }
 
+    public List<Integer> listAssignedAgentConfigurationIds() {
+        return deviceMapper.listAssignedAgentConfigurationIds();
+    }
+
     /** One row per device of the customer with its configuration + last applied revision. */
     public List<DeviceSyncRow> listDevicesForSync(int customerId) {
         return deviceMapper.listDevicesForSync(customerId);

@@ -89,6 +89,11 @@ public interface AgentDeviceMapper {
             "AND agentSecretHash IS NOT NULL"})
     List<String> listDeviceNumbersByConfigurationId(@Param("configurationId") int configurationId);
 
+    /** Configurations which currently have at least one command-driven agent assigned. */
+    @Select({"SELECT DISTINCT configurationId FROM devices WHERE configurationId IS NOT NULL " +
+            "AND agentSecretHash IS NOT NULL ORDER BY configurationId"})
+    List<Integer> listAssignedAgentConfigurationIds();
+
     /** One row per device of the customer with its configuration + last applied revision (LEFT JOIN: never-reported devices included). */
     @Select({"SELECT d.number AS deviceNumber, d.configurationId AS configurationId, d.agentCapabilities AS capabilitiesJson, " +
             "s.appliedConfigRevision AS appliedConfigRevision " +

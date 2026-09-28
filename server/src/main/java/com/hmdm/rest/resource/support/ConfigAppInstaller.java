@@ -90,6 +90,15 @@ public class ConfigAppInstaller {
         return queued;
     }
 
+    /** Backfill configuration apps after a server upgrade/restart. Exact completed intents are skipped. */
+    public int enqueueAllAssignedConfigApps() {
+        int queued = 0;
+        for (Integer configurationId : commandDAO.listAssignedAgentConfigurationIds()) {
+            if (configurationId != null) queued += enqueueConfigAppsForConfiguration(configurationId);
+        }
+        return queued;
+    }
+
     private int enqueueApps(String deviceNumber, List<Application> apps, boolean skipAlreadyInstalledIntent) {
         int queued = 0;
         long now = System.currentTimeMillis();

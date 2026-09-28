@@ -37,6 +37,8 @@ import javax.ws.rs.core.MediaType;
 import javax.inject.Named;
 
 import com.hmdm.notification.PushService;
+import com.hmdm.event.ConfigurationUpdatedEvent;
+import com.hmdm.event.EventService;
 import com.hmdm.persistence.*;
 import com.hmdm.persistence.domain.*;
 import com.hmdm.rest.json.*;
@@ -68,6 +70,7 @@ public class ApplicationResource {
     private ApplicationDAO applicationDAO;
     private ConfigurationDAO configurationDAO;
     private PushService pushService;
+    private EventService eventService;
 
     /**
      * <p>A constructor required by Swagger.</p>
@@ -79,10 +82,12 @@ public class ApplicationResource {
     public ApplicationResource(ApplicationDAO applicationDAO,
                                ConfigurationDAO configurationDAO,
                                PushService pushService,
+                               EventService eventService,
                                @Named("files.directory") String filesDirectory) {
         this.applicationDAO = applicationDAO;
         this.configurationDAO = configurationDAO;
         this.pushService = pushService;
+        this.eventService = eventService;
         this.baseDirectory = new File(filesDirectory);
 
         if (!this.baseDirectory.exists()) {
@@ -514,6 +519,11 @@ public class ApplicationResource {
             this.applicationDAO.updateApplicationConfigurations(request);
 
             for (ApplicationConfigurationLink configurationLink : request.getConfigurations()) {
+                // Updating an app↔configuration link bypasses ConfigurationDAO, so it does not
+                // naturally emit CONFIGURATION_UPDATED. Agent v1 relies on that event to enqueue
+                // app.install for devices already assigned to the configuration.
+                this.eventService.fireEvent(new ConfigurationUpdatedEvent(
+                        configurationLink.getConfigurationId()));
                 if (configurationLink.isNotify()) {
                     this.pushService.notifyDevicesOnUpdate(configurationLink.getConfigurationId());
                 }
@@ -552,6 +562,8 @@ public class ApplicationResource {
                     SecurityContext.get().getCurrentUserName());
             this.applicationDAO.updateApplicationVersionConfigurations(request, user);
             for (ApplicationVersionConfigurationLink configurationLink : request.getConfigurations()) {
+                this.eventService.fireEvent(new ConfigurationUpdatedEvent(
+                        configurationLink.getConfigurationId()));
                 if (configurationLink.isNotify()) {
                     this.pushService.notifyDevicesOnUpdate(configurationLink.getConfigurationId());
                 }
