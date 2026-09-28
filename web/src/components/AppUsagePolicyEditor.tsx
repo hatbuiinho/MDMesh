@@ -18,18 +18,45 @@ export function AppUsagePolicyEditor({ configurationId, apps, readOnly }: { conf
     void getAppUsageReport(configurationId, iso(from), iso(now)).then(setReport).catch(() => undefined);
   }, [configurationId]);
   if (!configurationId) return <p className="note">Save the configuration first, then add app usage rules.</p>;
-  const packages = apps.filter((a) => (a.action ?? 1) === 1 && a.pkg).map((a) => a.pkg!);
+  const availableApps = apps.filter((a): a is ConfigApp & { pkg: string } => (a.action ?? 1) === 1 && Boolean(a.pkg));
+  const packages = availableApps.map((a) => a.pkg);
   const add = () => {
     const pkg = packages.find((p) => !policy.rules.some((r) => r.packageName === p)); if (!pkg) return;
     setPolicy({ ...policy, rules: [...policy.rules, { packageName: pkg, dailyLimitMinutes: 60, warningMinutes: 5, action: 'suspend', enabled: true, allowedWindows: [] }] });
   };
   const update = (i: number, patch: Partial<AppUsageRule>) => setPolicy({ ...policy, rules: policy.rules.map((r, n) => n === i ? { ...r, ...patch } : r) });
-  const save = async () => { setBusy(true); try { setPolicy(await saveAppUsagePolicy(configurationId, policy)); toast.push('ok', 'App usage saved', 'Devices will apply it at their next check-in.'); } catch (e) { toast.push('err', 'Save failed', e instanceof Error ? e.message : ''); } finally { setBusy(false); } };
+  const save = async () => {
+    const selected = policy.rules.map((r) => r.packageName);
+    if (selected.some((pkg) => !packages.includes(pkg))) {
+      toast.push('err', 'Invalid app', 'Choose an app from the search suggestions before saving.');
+      return;
+    }
+    if (new Set(selected).size !== selected.length) {
+      toast.push('err', 'Duplicate app', 'Each app can only have one usage rule.');
+      return;
+    }
+    setBusy(true);
+    try { setPolicy(await saveAppUsagePolicy(configurationId, policy)); toast.push('ok', 'App usage saved', 'Devices will apply it at their next check-in.'); } catch (e) { toast.push('err', 'Save failed', e instanceof Error ? e.message : ''); } finally { setBusy(false); }
+  };
   const grant = async (row: AppUsageReport) => { try { await grantAppUsage(row.deviceNumber, row.packageName, 60); toast.push('ok', 'Extra time granted', `${row.deviceNumber} can use ${row.packageName} for 60 more minutes today.`); } catch (e) { toast.push('err', 'Grant failed', e instanceof Error ? e.message : ''); } };
   return <>
     <div className="cfg-field"><div className="cfg-field-label"><label>Policy timezone</label></div><input className="input" disabled={readOnly} value={policy.timezone} onChange={(e) => setPolicy({ ...policy, timezone: e.target.value })} /></div>
-    {policy.rules.map((r, i) => <div className="usage-rule" key={`${r.packageName}-${i}`}>
-      <select className="sel" disabled={readOnly} value={r.packageName} onChange={(e) => update(i, { packageName: e.target.value })}>{packages.map((p) => <option key={p}>{p}</option>)}</select>
+    {policy.rules.map((r, i) => <div className="usage-rule" key={i}>
+      <div className="usage-app-picker">
+        <input
+          className="input"
+          type="search"
+          list={`usage-apps-${configurationId}-${i}`}
+          aria-label="Search app"
+          placeholder="Search app name or package"
+          disabled={readOnly}
+          value={r.packageName}
+          onChange={(e) => update(i, { packageName: e.target.value })}
+        />
+        <datalist id={`usage-apps-${configurationId}-${i}`}>
+          {availableApps.map((app) => <option key={app.pkg} value={app.pkg}>{app.name || app.pkg}</option>)}
+        </datalist>
+      </div>
       <label>Daily minutes <input className="input" type="number" min={1} max={1440} disabled={readOnly} value={r.dailyLimitMinutes ?? ''} onChange={(e) => update(i, { dailyLimitMinutes: e.target.value ? Number(e.target.value) : undefined })} /></label>
       <label>Warn before <input className="input" type="number" min={0} max={120} disabled={readOnly} value={r.warningMinutes} onChange={(e) => update(i, { warningMinutes: Number(e.target.value) })} /></label>
       <label className="kiosk-toggle"><input type="checkbox" disabled={readOnly} checked={r.enabled} onChange={(e) => update(i, { enabled: e.target.checked })} /> Enabled</label>
@@ -39,6 +66,7 @@ export function AppUsagePolicyEditor({ configurationId, apps, readOnly }: { conf
         {DAYS.map((d, di) => <label key={d}><input type="checkbox" disabled={readOnly} checked={w.days.includes(di + 1)} onChange={(e) => { const days=e.target.checked?[...w.days,di+1]:w.days.filter(x=>x!==di+1); update(i,{allowedWindows:r.allowedWindows.map((x,n)=>n===wi?{...x,days}:x)}); }} />{d}</label>)}
         <input className="input" type="time" disabled={readOnly} value={w.from} onChange={(e)=>update(i,{allowedWindows:r.allowedWindows.map((x,n)=>n===wi?{...x,from:e.target.value}:x)})}/>
         <span>–</span><input className="input" type="time" disabled={readOnly} value={w.to} onChange={(e)=>update(i,{allowedWindows:r.allowedWindows.map((x,n)=>n===wi?{...x,to:e.target.value}:x)})}/>
+        {!readOnly && <button className="btn btn-sm btn-ghost usage-window-remove" aria-label={`Remove time window ${wi + 1}`} onClick={() => update(i, { allowedWindows: r.allowedWindows.filter((_, n) => n !== wi) })}>Remove window</button>}
       </div>)}
     </div>)}
     {!readOnly && <div className="modal-actions"><button className="btn" disabled={!packages.length} onClick={add}>Add app rule</button><button className="btn btn-primary" disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save usage policy'}</button></div>}

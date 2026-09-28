@@ -3025,10 +3025,13 @@ a {
 .usage-rule { display:grid; grid-template-columns:minmax(210px,2fr) repeat(2,minmax(120px,1fr)) auto auto auto;
   gap:10px; align-items:end; padding:12px 0; border-bottom:1px solid var(--line-soft); }
 .usage-rule > label { display:flex; flex-direction:column; gap:5px; font-size:12px; color:var(--muted); }
+.usage-app-picker { min-width:0; }
+.usage-app-picker .input { width:100%; }
 .usage-window { grid-column:1/-1; display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:8px;
   border-radius:8px; background:var(--panel-2); }
 .usage-window label { display:flex; align-items:center; gap:3px; font-size:11px; }
 .usage-window .input { width:auto; }
+.usage-window-remove { margin-left:auto; }
 .usage-report { margin-top:18px; overflow-x:auto; }
 .usage-report table { width:100%; border-collapse:collapse; font-size:12px; }
 .usage-report th,.usage-report td { padding:7px 9px; border-bottom:1px solid var(--line-soft); text-align:left; }
