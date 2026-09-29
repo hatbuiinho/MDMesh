@@ -1,32 +1,68 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AppShell } from '../ui/AppShell';
 import { DeviceGlyph } from '../ui/DeviceGlyph';
 import {
-  searchDevices, updateDeviceDescription, type DeviceView, type ConfigurationLookup,
+  getDeviceByNumber, searchDevices, updateDeviceDescription, type DeviceView, type ConfigurationLookup,
 } from '../api/devices';
-import { ActionConsole } from '../components/ActionConsole';
-import { TelemetryCard } from '../components/TelemetryCard';
-import { EventTimeline } from '../components/EventTimeline';
-import { LocationPanel } from '../components/LocationPanel';
-import { DeviceAppsTab } from '../components/DeviceAppsTab';
 import { ConfigStatusCard } from '../components/ConfigStatusCard';
+import { Modal } from '../ui/Modal';
 import { getTelemetry, type TelemetrySnapshot } from '../api/telemetry';
 import { getConfigStatus, type ConfigStatus } from '../api/configSync';
 import {
-  getDeviceState, forceSync, queueCommand, syncConfigApps, type DeviceState,
+  getDeviceCapabilities, getDeviceState, forceSync, queueCommand, syncConfigApps, type DeviceState,
 } from '../api/commands';
 import { ApiError } from '../api/client';
 import { isOnline as isOnlineByRecency } from '../ui/status';
 import { useToast } from '../ui/toast';
 import { deviceDisplayName, deviceSecondaryId, fmtDateTime, fmtRelative, orDash } from '../ui/format';
 
-type Tab = 'control' | 'apps' | 'telemetry' | 'events' | 'location';
+type Tab = 'control' | 'apps' | 'appUsage' | 'telemetry' | 'events' | 'location' | 'details';
+
+const loadActionConsole = () => import('../components/ActionConsole');
+const loadTelemetryCard = () => import('../components/TelemetryCard');
+const loadEventTimeline = () => import('../components/EventTimeline');
+const loadLocationPanel = () => import('../components/LocationPanel');
+const loadDeviceAppsTab = () => import('../components/DeviceAppsTab');
+const loadDeviceAppUsageTab = () => import('../components/DeviceAppUsageTab');
+
+const ActionConsole = lazy(() => loadActionConsole().then((m) => ({ default: m.ActionConsole })));
+const TelemetryCard = lazy(() => loadTelemetryCard().then((m) => ({ default: m.TelemetryCard })));
+const EventTimeline = lazy(() => loadEventTimeline().then((m) => ({ default: m.EventTimeline })));
+const LocationPanel = lazy(() => loadLocationPanel().then((m) => ({ default: m.LocationPanel })));
+const DeviceAppsTab = lazy(() => loadDeviceAppsTab().then((m) => ({ default: m.DeviceAppsTab })));
+const DeviceAppUsageTab = lazy(() => loadDeviceAppUsageTab().then((m) => ({ default: m.DeviceAppUsageTab })));
+
+const TAB_PREFETCH: Partial<Record<Tab, () => Promise<unknown>>> = {
+  control: loadActionConsole,
+  apps: loadDeviceAppsTab,
+  appUsage: loadDeviceAppUsageTab,
+  telemetry: loadTelemetryCard,
+  events: loadEventTimeline,
+  location: loadLocationPanel,
+};
+
+const TABS: Array<{ id: Tab; label: string; mobileOnly?: boolean }> = [
+  { id: 'control', label: 'Control' },
+  { id: 'apps', label: 'Apps' },
+  { id: 'appUsage', label: 'App Usage' },
+  { id: 'details', label: 'Details', mobileOnly: true },
+  { id: 'telemetry', label: 'Telemetry' },
+  { id: 'events', label: 'Events' },
+  { id: 'location', label: 'Location' },
+];
+
+const TAB_IDS = new Set<Tab>(TABS.map((item) => item.id));
+
+function tabFromQuery(value: string | null): Tab {
+  return value && TAB_IDS.has(value as Tab) ? value as Tab : 'control';
+}
 
 interface Row {
   k: string;
   v: import('react').ReactNode;
   mono?: boolean;
+  copy?: string;
 }
 
 function powerLabel(mode?: string | null): string {
@@ -103,7 +139,13 @@ function NameField({
   }
 
   return (
-    <button type="button" className="dd-name" onClick={() => setEditing(true)} title="Rename this device">
+    <button
+      type="button"
+      className="dd-name"
+      onClick={() => setEditing(true)}
+      title="Rename this device"
+      aria-label="Rename device"
+    >
       <span className={`mfr ${device.description ? '' : 'muted'}`}>
         {device.description ? 'Rename' : 'Add a name'}
       </span>
@@ -115,9 +157,32 @@ function NameField({
   );
 }
 
+function CopyValue({ value, children }: { value: string; children: import('react').ReactNode }) {
+  const toast = useToast();
+  return (
+    <span className="dd-copy-value">
+      <span>{children}</span>
+      <button
+        type="button"
+        className="dd-copy-button"
+        aria-label={`Copy ${value}`}
+        title="Copy"
+        onClick={() => {
+          void navigator.clipboard.writeText(value)
+            .then(() => toast.push('ok', 'Copied', value))
+            .catch(() => toast.push('err', 'Copy failed', 'Clipboard access is unavailable.'));
+        }}
+      >
+        Copy
+      </button>
+    </span>
+  );
+}
+
 export function DeviceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const toast = useToast();
   const [device, setDevice] = useState<DeviceView | null>(null);
   const [configs, setConfigs] = useState<Record<string, ConfigurationLookup>>({});
@@ -126,24 +191,48 @@ export function DeviceDetailPage() {
   const [tele, setTele] = useState<TelemetrySnapshot | null>(null);
   const [ds, setDs] = useState<DeviceState | null>(null);
   const [cfgStatus, setCfgStatus] = useState<ConfigStatus | null>(null);
-  const [tab, setTab] = useState<Tab>('control');
+  const [capabilities, setCapabilities] = useState<Set<string> | null>(null);
+  const [tab, setTab] = useState<Tab>(() => tabFromQuery(searchParams.get('tab')));
   const [busy, setBusy] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const [lastLiveRefresh, setLastLiveRefresh] = useState<number | null>(null);
+  const [refreshingLive, setRefreshingLive] = useState(false);
+  const [confirmLock, setConfirmLock] = useState(false);
+  const [browserOffline, setBrowserOffline] = useState(() => !navigator.onLine);
+  const liveRequestSeq = useRef(0);
 
-  const load = useCallback(async () => {
+  const selectTab = useCallback((next: Tab) => {
+    setTab(next);
+    setSearchParams((current) => {
+      const params = new URLSearchParams(current);
+      if (next === 'control') params.delete('tab');
+      else params.set('tab', next);
+      return params;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  useEffect(() => {
+    setTab(tabFromQuery(searchParams.get('tab')));
+  }, [searchParams]);
+
+  const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
-      // The route param is the device number (see DevicesPage/DashboardPage links), so a narrow
-      // server-side search finds it without downloading the fleet. Old id-style links (and rare
-      // substring collisions on the number) miss it and fall back to the broad fetch.
+      // Current links use the device number and therefore take the lightweight exact endpoint.
+      // Keep a one-row search only for backwards-compatible, old database-id links.
       const matches = (d: DeviceView) => d.number === id || String(d.id) === id;
-      let res = await searchDevices({ value: id, pageSize: 1 });
-      let found = (res.devices?.items ?? []).find(matches) ?? null;
-      if (!found) {
-        res = await searchDevices({ pageSize: 1000 });
+      let found: DeviceView | null = null;
+      try {
+        found = await getDeviceByNumber(id ?? '', signal);
+      } catch (exactError) {
+        if (exactError instanceof ApiError && (exactError.httpStatus === 0 || exactError.httpStatus === 401 || exactError.httpStatus === 403)) {
+          throw exactError;
+        }
+        const res = await searchDevices({ value: id, pageSize: 1 }, signal);
         found = (res.devices?.items ?? []).find(matches) ?? null;
+        setConfigs(res.configurations ?? {});
       }
-      setConfigs(res.configurations ?? {});
       setDevice(found);
       if (!found) setError('Device not found.');
     } catch (err) {
@@ -156,32 +245,117 @@ export function DeviceDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    void load();
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
   }, [load]);
+
+  useEffect(() => {
+    if (!device) return;
+    const controller = new AbortController();
+    void getDeviceCapabilities(device.number, controller.signal)
+      .then((tokens) => setCapabilities(new Set(tokens)))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [device]);
+
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 921px)');
+    const leaveMobileDetails = (event: MediaQueryListEvent | MediaQueryList) => {
+      if (event.matches) setTab((current) => {
+        if (current !== 'details') return current;
+        setSearchParams((params) => {
+          const next = new URLSearchParams(params);
+          next.delete('tab');
+          return next;
+        }, { replace: true });
+        return 'control';
+      });
+    };
+    leaveMobileDetails(desktop);
+    desktop.addEventListener('change', leaveMobileDetails);
+    return () => desktop.removeEventListener('change', leaveMobileDetails);
+  }, [setSearchParams]);
+
+  useEffect(() => {
+    const updateNetworkState = () => setBrowserOffline(!navigator.onLine);
+    window.addEventListener('online', updateNetworkState);
+    window.addEventListener('offline', updateNetworkState);
+    return () => {
+      window.removeEventListener('online', updateNetworkState);
+      window.removeEventListener('offline', updateNetworkState);
+    };
+  }, []);
+
+  const refreshLive = useCallback(async (signal?: AbortSignal) => {
+    if (!device) return;
+    const requestSeq = ++liveRequestSeq.current;
+    setRefreshingLive(true);
+    const results = await Promise.allSettled([
+      getTelemetry(device.number, signal),
+      getDeviceState(device.number, signal),
+      getConfigStatus(device.number, signal),
+    ]);
+    if (requestSeq !== liveRequestSeq.current) return;
+    if (signal?.aborted) {
+      setRefreshingLive(false);
+      return;
+    }
+    const [telemetryResult, stateResult, configResult] = results;
+    if (telemetryResult.status === 'fulfilled') setTele(telemetryResult.value);
+    if (stateResult.status === 'fulfilled') setDs(stateResult.value);
+    if (configResult.status === 'fulfilled') setCfgStatus(configResult.value);
+    const successCount = results.filter((result) => result.status === 'fulfilled').length;
+    if (successCount > 0) setLastLiveRefresh(Date.now());
+    setLiveError(successCount === results.length ? null : 'Some live data could not be refreshed. Showing the last available values.');
+    setRefreshingLive(false);
+  }, [device]);
 
   useEffect(() => {
     if (!device) return;
     let on = true;
     let t: ReturnType<typeof setTimeout>;
+    let request: AbortController | null = null;
     // Self-scheduling poll: the next tick is armed only after the current one finishes, so slow
     // responses can't stack overlapping requests.
     const poll = async () => {
-      await Promise.all([
-        getTelemetry(device.number).then((v) => { if (on) setTele(v); }).catch(() => undefined),
-        getDeviceState(device.number).then((v) => { if (on) setDs(v); }).catch(() => undefined),
-        getConfigStatus(device.number).then((v) => { if (on) setCfgStatus(v); }).catch(() => undefined),
-      ]);
+      if (document.hidden) {
+        request?.abort();
+        t = setTimeout(() => void poll(), 30000);
+        return;
+      }
+      request?.abort();
+      request = new AbortController();
+      await refreshLive(request.signal);
       if (!on) return;
-      t = setTimeout(() => void poll(), 5000);
+      const delay = isOnlineByRecency(device.lastUpdate) ? 10000 : 30000;
+      t = setTimeout(() => void poll(), delay);
     };
+    const resume = () => {
+      if (!document.hidden) {
+        clearTimeout(t);
+        void poll();
+      }
+    };
+    document.addEventListener('visibilitychange', resume);
     void poll();
-    return () => { on = false; clearTimeout(t); };
+    return () => {
+      on = false;
+      clearTimeout(t);
+      request?.abort();
+      document.removeEventListener('visibilitychange', resume);
+    };
+  }, [device, refreshLive]);
+
+  const refreshState = useCallback(() => {
+    if (!device) return;
+    void getDeviceState(device.number).then(setDs).catch(() => undefined);
   }, [device]);
 
   const configName =
-    device?.configurationId != null
+    device?.configurationName ?? (device?.configurationId != null
       ? configs[String(device.configurationId)]?.name ?? '—'
-      : '—';
+      : '—');
 
   const hw = (tele?.hardware ?? {}) as Record<string, unknown>;
   const idn = (tele?.identity ?? {}) as Record<string, unknown>;
@@ -197,8 +371,7 @@ export function DeviceDetailPage() {
     setBusy(true);
     try {
       await forceSync(device.number);
-      void getDeviceState(device.number).then(setDs).catch(() => undefined);
-      void getConfigStatus(device.number).then(setCfgStatus).catch(() => undefined);
+      void refreshLive();
       toast.push('ok', 'Sync requested', '');
     } catch (e) {
       toast.push('err', 'Sync failed', e instanceof Error ? e.message : '');
@@ -266,8 +439,15 @@ export function DeviceDetailPage() {
 
   // Online/offline is recency of last check-in — NOT statusCode (which is config compliance and
   // stays green for a device that was factory-reset and stopped reporting).
-  const online = isOnlineByRecency(device.lastUpdate);
+  const lastSeen = Math.max(device.lastUpdate ?? 0, ds?.updatedAt ?? 0);
+  const online = isOnlineByRecency(lastSeen);
   const statusLabel = online ? 'Online' : 'Offline';
+  const batteryTone = ds?.battery == null || ds.battery < 0
+    ? 'unknown'
+    : ds.battery <= 15 ? 'critical'
+    : ds.battery <= 30 ? 'low'
+    : 'normal';
+  const canLock = capabilities == null || capabilities.has('device.lock');
 
   const statusRows: Row[] = [
     { k: 'Battery', v: ds ? (ds.battery < 0 ? '—' : `${ds.battery}% · ${ds.charging ? 'charging' : 'not charging'}`) : '—' },
@@ -278,13 +458,13 @@ export function DeviceDetailPage() {
   const hardwareRows: Row[] = [
     { k: 'Android', v: orDash(teleStr(hw.osRelease) ?? ds?.androidRelease ?? device.androidVersion) },
     { k: 'Storage', v: orDash(teleStr(hw.storage) ?? teleStr(hw.storageFree)) },
-    { k: 'Serial', v: orDash(teleStr(idn.serial) ?? device.serial), mono: true },
-    { k: 'IMEI', v: orDash(teleStr(idn.imei) ?? device.imei), mono: true },
+    { k: 'Serial', v: orDash(teleStr(idn.serial) ?? device.serial), mono: true, copy: teleStr(idn.serial) ?? device.serial },
+    { k: 'IMEI', v: orDash(teleStr(idn.imei) ?? device.imei), mono: true, copy: teleStr(idn.imei) ?? device.imei },
   ];
   const networkRows: Row[] = [
     { k: 'Type', v: orDash(teleStr(dyn.networkType) ?? teleStr(dyn.network)) },
-    { k: 'Local IP', v: orDash(teleStr(dyn.localIp) ?? teleStr(hw.localIp)), mono: true },
-    { k: 'Public IP', v: orDash(teleStr((tele as Record<string, unknown> | null)?.publicIp) ?? device.publicIp), mono: true },
+    { k: 'Local IP', v: orDash(teleStr(dyn.localIp) ?? teleStr(hw.localIp)), mono: true, copy: teleStr(dyn.localIp) ?? teleStr(hw.localIp) },
+    { k: 'Public IP', v: orDash(teleStr((tele as Record<string, unknown> | null)?.publicIp) ?? device.publicIp), mono: true, copy: teleStr((tele as Record<string, unknown> | null)?.publicIp) ?? device.publicIp },
   ];
   const managementRows: Row[] = [
     { k: 'Config', v: configName },
@@ -307,6 +487,7 @@ export function DeviceDetailPage() {
             </a>
           ),
           mono: true,
+          copy: `${loc!.lat},${loc!.lon}`,
         },
         { k: 'Accuracy', v: loc!.accuracyM != null ? `±${Math.round(loc!.accuracyM)} m` : '—' },
         { k: 'Source', v: orDash(loc!.provider) },
@@ -322,6 +503,50 @@ export function DeviceDetailPage() {
     { title: 'Management', rows: managementRows },
   ];
 
+  const detailGroups = groups.map((g) => (
+    <div key={g.title}>
+      <div className="grp">{g.title}</div>
+      {g.rows.map((r) => (
+        <div className="row" key={r.k}>
+          <span className="k">{r.k}</span>
+          <span className={`v ${r.mono ? 'mono' : ''}`}>
+            {r.copy ? <CopyValue value={r.copy}>{r.v}</CopyValue> : r.v}
+          </span>
+        </div>
+      ))}
+    </div>
+  ));
+  const mobileDetailGroups = groups.map((g, index) => (
+    <details className="dd-detail-group" key={g.title} open={index === 0}>
+      <summary>{g.title}</summary>
+      <div className="dd-detail-group-body">
+        {g.rows.map((r) => (
+          <div className="row" key={r.k}>
+            <span className="k">{r.k}</span>
+            <span className={`v ${r.mono ? 'mono' : ''}`}>
+              {r.copy ? <CopyValue value={r.copy}>{r.v}</CopyValue> : r.v}
+            </span>
+          </div>
+        ))}
+      </div>
+    </details>
+  ));
+
+  function moveTab(current: Tab, direction: -1 | 1) {
+    const visibleTabs = TABS.filter((item) => !item.mobileOnly || window.matchMedia('(max-width: 920px)').matches);
+    const currentIndex = visibleTabs.findIndex((item) => item.id === current);
+    const next = visibleTabs[(currentIndex + direction + visibleTabs.length) % visibleTabs.length];
+    selectTab(next.id);
+    requestAnimationFrame(() => document.getElementById(`device-tab-${next.id}`)?.focus());
+  }
+
+  function focusEdgeTab(edge: 'first' | 'last') {
+    const visibleTabs = TABS.filter((item) => !item.mobileOnly || window.matchMedia('(max-width: 920px)').matches);
+    const next = edge === 'first' ? visibleTabs[0] : visibleTabs[visibleTabs.length - 1];
+    selectTab(next.id);
+    requestAnimationFrame(() => document.getElementById(`device-tab-${next.id}`)?.focus());
+  }
+
   return (
     <AppShell title={deviceDisplayName(device)}>
       <div className="crumb">
@@ -331,13 +556,25 @@ export function DeviceDetailPage() {
         / {deviceDisplayName(device)}
       </div>
 
+      {(browserOffline || liveError) && (
+        <div className="dd-live-warning" role="status">
+          <span>
+            {browserOffline ? 'Connection lost. Showing the last available values.' : liveError}
+            {lastLiveRefresh ? ` Last refreshed ${fmtRelative(lastLiveRefresh)}.` : ''}
+          </span>
+          <button className="btn" disabled={browserOffline || refreshingLive} onClick={() => void refreshLive()}>
+            {refreshingLive ? 'Refreshing…' : 'Retry'}
+          </button>
+        </div>
+      )}
+
       <div className="dd-cols">
         {/* LEFT: the device */}
         <aside className="panel detail-rail">
           <div className="top">
             <span className={`dot ${online ? 'on' : 'off'}`} />
             <span className={`st ${online ? 'on' : 'off'}`}>{statusLabel}</span>
-            <span className="ago">· {fmtRelative(device.lastUpdate)}</span>
+            <span className="ago">· {fmtRelative(lastSeen)}</span>
             <DeviceGlyph className="ico" name={device.description || device.number} size={20} />
           </div>
           <h1>{deviceDisplayName(device)}</h1>
@@ -347,62 +584,149 @@ export function DeviceDetailPage() {
             onSaved={(desc) => setDevice((d) => (d ? { ...d, description: desc } : d))}
           />
 
-          <div className="actions">
-            <button className="pri" disabled={busy} onClick={() => void syncNow()}>
-              Sync now
-            </button>
-            <button className="sec" disabled={busy} onClick={() => void lock()}>
-              Lock
-            </button>
-            <button className="sec" disabled={busy} onClick={() => void installConfigApps()}>
-              Install config apps
-            </button>
+          <div className="dd-mobile-vitals" aria-label="Device summary">
+            <span className={`battery-${batteryTone}`}>
+              {ds?.battery != null && ds.battery >= 0
+                ? `${ds.battery}%${ds.charging ? ' · charging' : ''}`
+                : 'Battery unknown'}
+            </span>
+            <span>{configName === '—' ? 'No configuration' : configName}</span>
           </div>
 
-          {groups.map((g) => (
-            <div key={g.title}>
-              <div className="grp">{g.title}</div>
-              {g.rows.map((r) => (
-                <div className="row" key={r.k}>
-                  <span className="k">{r.k}</span>
-                  <span className={`v ${r.mono ? 'mono' : ''}`}>{r.v}</span>
-                </div>
-              ))}
+          <div className="actions">
+            <button className="pri" disabled={busy} onClick={() => void syncNow()} aria-label="Sync device now">
+              Sync now
+            </button>
+            <div className="dd-desktop-actions">
+              <button
+                className="sec"
+                disabled={busy}
+                aria-disabled={!canLock}
+                title={canLock ? undefined : 'This device does not support remote lock.'}
+                onClick={() => { if (canLock) setConfirmLock(true); }}
+                aria-label="Lock device"
+              >
+                Lock
+              </button>
+              <button className="sec" disabled={busy} onClick={() => void installConfigApps()}>
+                Install config apps
+              </button>
             </div>
-          ))}
+            <details className="dd-mobile-action-menu">
+              <summary className="sec">More actions</summary>
+              <div className="dd-mobile-action-popover">
+                <button
+                  className="sec"
+                  disabled={busy}
+                  aria-disabled={!canLock}
+                  title={canLock ? undefined : 'This device does not support remote lock.'}
+                  onClick={() => { if (canLock) setConfirmLock(true); }}
+                  aria-label="Lock device"
+                >
+                  Lock device
+                </button>
+                <button className="sec" disabled={busy} onClick={() => void installConfigApps()}>
+                  Install configuration apps
+                </button>
+              </div>
+            </details>
+          </div>
 
-          <ConfigStatusCard status={cfgStatus} />
+          <div className="dd-desktop-details">
+            {detailGroups}
+            <ConfigStatusCard status={cfgStatus} />
+          </div>
         </aside>
 
         {/* RIGHT: work */}
         <section className="panel detail-main">
-          <div className="tabs" role="tablist">
-            <button className={tab === 'control' ? 'on' : ''} onClick={() => setTab('control')}>
-              Control
-            </button>
-            <button className={tab === 'apps' ? 'on' : ''} onClick={() => setTab('apps')}>
-              Apps
-            </button>
-            <button className={tab === 'telemetry' ? 'on' : ''} onClick={() => setTab('telemetry')}>
-              Telemetry
-            </button>
-            <button className={tab === 'events' ? 'on' : ''} onClick={() => setTab('events')}>
-              Events
-            </button>
-            <button className={tab === 'location' ? 'on' : ''} onClick={() => setTab('location')}>
-              Location
-            </button>
+          <div className="tabs" role="tablist" aria-label="Device sections">
+            {TABS.map((item) => (
+              <button
+                key={item.id}
+                id={`device-tab-${item.id}`}
+                type="button"
+                role="tab"
+                aria-selected={tab === item.id}
+                aria-controls="device-tab-panel"
+                tabIndex={tab === item.id ? 0 : -1}
+                className={`${tab === item.id ? 'on' : ''} ${item.mobileOnly ? 'mobile-only-tab' : ''}`}
+                onClick={(event) => {
+                  selectTab(item.id);
+                  event.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                }}
+                onPointerEnter={() => { void TAB_PREFETCH[item.id]?.(); }}
+                onFocus={() => { void TAB_PREFETCH[item.id]?.(); }}
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                    event.preventDefault();
+                    moveTab(item.id, event.key === 'ArrowLeft' ? -1 : 1);
+                  } else if (event.key === 'Home' || event.key === 'End') {
+                    event.preventDefault();
+                    focusEdgeTab(event.key === 'Home' ? 'first' : 'last');
+                  }
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
 
-          <div className="tabbody">
-            {tab === 'control' && <ActionConsole device={device} />}
-            {tab === 'apps' && <DeviceAppsTab device={device} />}
-            {tab === 'telemetry' && <TelemetryCard device={device} />}
-            {tab === 'events' && <EventTimeline device={device} />}
-            {tab === 'location' && <LocationPanel device={device} />}
+          <div
+            id="device-tab-panel"
+            className="tabbody"
+            role="tabpanel"
+            aria-labelledby={`device-tab-${tab}`}
+          >
+            <Suspense fallback={<div className="empty"><span className="spin" /> Loading…</div>}>
+              {tab === 'control' && (
+                <ActionConsole
+                  device={device}
+                  state={ds}
+                  capabilities={capabilities}
+                  onStateRefresh={refreshState}
+                />
+              )}
+              {tab === 'apps' && <DeviceAppsTab device={device} />}
+              {tab === 'appUsage' && <DeviceAppUsageTab device={device} />}
+              {tab === 'details' && (
+                <div className="dd-mobile-details detail-rail">
+                  {mobileDetailGroups}
+                  <details className="dd-detail-group">
+                    <summary>Configuration status</summary>
+                    <div className="dd-detail-group-body dd-config-status">
+                      <ConfigStatusCard status={cfgStatus} />
+                    </div>
+                  </details>
+                </div>
+              )}
+              {tab === 'telemetry' && <TelemetryCard telemetry={tele} />}
+              {tab === 'events' && <EventTimeline device={device} />}
+              {tab === 'location' && <LocationPanel device={device} />}
+            </Suspense>
           </div>
         </section>
       </div>
+
+      {confirmLock && (
+        <Modal onClose={busy ? undefined : () => setConfirmLock(false)} ariaLabel="Lock device">
+          <h3>Lock this device?</h3>
+          <p className="muted">The screen will lock as soon as the device receives the command.</p>
+          <div className="modal-actions">
+            <button className="btn" disabled={busy} onClick={() => setConfirmLock(false)}>Cancel</button>
+            <button
+              className="btn btn-danger"
+              disabled={busy}
+              onClick={() => {
+                setConfirmLock(false);
+                void lock();
+              }}
+            >
+              Lock device
+            </button>
+          </div>
+        </Modal>
+      )}
     </AppShell>
   );
 }

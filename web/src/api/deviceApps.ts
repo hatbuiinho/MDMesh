@@ -1,4 +1,5 @@
-import { queueCommand, listCommandHistory, type QueueCommandRequest } from './commands';
+import { queueCommand, getCommand, type CommandHistoryItem, type QueueCommandRequest } from './commands';
+import { apiClient } from './client';
 
 // Device app inventory for the kiosk picker. The agent answers `apps.scan` / `apps.icons`
 // commands and returns the data as JSON in the command-result `detail`; we read it back from
@@ -13,9 +14,14 @@ export interface AppInfo {
   versionCode?: number;
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
+  if (signal?.aborted) { reject(new DOMException('Cancelled', 'AbortError')); return; }
+  const onAbort = () => { window.clearTimeout(timer); reject(new DOMException('Cancelled', 'AbortError')); };
+  const timer = window.setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve(); }, ms);
+  signal?.addEventListener('abort', onAbort, { once: true });
+});
 
-/** Queue a command and poll command history until it completes, returning its result `detail`. */
+/** Queue a command and poll only that command until it completes, returning its result `detail`. */
 async function runForResult(
   deviceId: number | string,
   req: QueueCommandRequest,
@@ -26,17 +32,17 @@ async function runForResult(
   const id = queued?.id;
   if (id == null) throw new Error('Command was not queued');
   const deadline = Date.now() + timeoutMs;
+  let delay = 750;
   while (Date.now() < deadline) {
     if (signal?.aborted) throw new Error('Cancelled');
-    await sleep(1500);
+    await sleep(delay, signal);
     if (signal?.aborted) throw new Error('Cancelled');
-    const hist = await listCommandHistory(deviceId, 0, signal).catch(() => []);
-    const cmd = hist.find((c) => String(c.id) === String(id));
-    if (!cmd) continue;
+    const cmd = await getCommand(deviceId, id, signal);
     if (cmd.status === 'done') return cmd.detail ?? '';
     if (cmd.status === 'failed' || cmd.status === 'unsupported' || cmd.status === 'expired') {
       throw new Error(cmd.detail || `Device returned ${cmd.status}`);
     }
+    delay = Math.min(Math.round(delay * 1.6), 4000);
   }
   throw new Error('Timed out waiting for the device (is it online?)');
 }
@@ -45,7 +51,9 @@ async function runForResult(
 export async function scanApps(deviceId: number | string, signal?: AbortSignal): Promise<AppInfo[]> {
   const detail = await runForResult(deviceId, { type: 'apps.scan' }, 75000, signal);
   const parsed = JSON.parse(detail || '{}') as { apps?: AppInfo[] };
-  return parsed.apps ?? [];
+  const apps = parsed.apps ?? [];
+  snapshotCache.set(String(deviceId), { value: { apps, scannedAt: Date.now() }, cachedAt: Date.now() });
+  return apps;
 }
 
 export interface ScanSnapshot {
@@ -53,18 +61,28 @@ export interface ScanSnapshot {
   scannedAt?: number;
 }
 
+const SNAPSHOT_CACHE_MS = 60_000;
+const snapshotCache = new Map<string, { value: ScanSnapshot | null; cachedAt: number }>();
+
 /**
- * The device's most recent saved scan, read from command history (every apps.scan result is
- * durably stored per device in the command's detail). Returns null if the device was never scanned,
- * so the picker can show the saved list instantly instead of re-scanning every time.
+ * The most recent saved scan, fetched through the server's indexed latest-snapshot lookup.
+ * A short in-memory cache makes tab switches free. Returns null if the device was never scanned.
  */
 export async function getLatestScan(deviceId: number | string): Promise<ScanSnapshot | null> {
-  const hist = await listCommandHistory(deviceId).catch(() => []); // newest-first (id DESC)
-  const scan = hist.find((c) => c.type === 'apps.scan' && c.status === 'done' && !!c.detail);
-  if (!scan?.detail) return null;
+  const key = String(deviceId), cached = snapshotCache.get(key);
+  if (cached && Date.now() - cached.cachedAt < SNAPSHOT_CACHE_MS) return cached.value;
+  const scan = await apiClient.get<CommandHistoryItem | null>(
+    `/private/agent/v1/devices/${encodeURIComponent(key)}/apps/latest`,
+  ).catch(() => null);
+  if (!scan?.detail) {
+    snapshotCache.set(key, { value: null, cachedAt: Date.now() });
+    return null;
+  }
   try {
     const apps = (JSON.parse(scan.detail).apps ?? []) as AppInfo[];
-    return apps.length ? { apps, scannedAt: scan.completedAt } : null;
+    const value = apps.length ? { apps, scannedAt: scan.completedAt } : null;
+    snapshotCache.set(key, { value, cachedAt: Date.now() });
+    return value;
   } catch {
     return null;
   }

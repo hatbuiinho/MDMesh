@@ -7,6 +7,6 @@ export interface TelemetrySnapshot {
   security?: Record<string, unknown>;
 }
 
-export async function getTelemetry(deviceId: number | string): Promise<TelemetrySnapshot | null> {
-  return apiClient.get<TelemetrySnapshot | null>(`/private/agent/v1/devices/${deviceId}/telemetry`);
+export async function getTelemetry(deviceId: number | string, signal?: AbortSignal): Promise<TelemetrySnapshot | null> {
+  return apiClient.get<TelemetrySnapshot | null>(`/private/agent/v1/devices/${deviceId}/telemetry`, signal);
 }

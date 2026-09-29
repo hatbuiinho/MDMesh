@@ -6,7 +6,7 @@
   "description": "MDMesh — admin console for the device fleet",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/check-bundle-budget.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },

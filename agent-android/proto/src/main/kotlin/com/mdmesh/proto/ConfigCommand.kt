@@ -21,6 +21,13 @@ data class ConfigApplyPayload(
     val applications: ConfigApplications = ConfigApplications(),
     val location: ConfigLocation? = null,
     val appUsage: AppUsagePolicy? = null,
+    val webAccess: WebAccessPolicy? = null,
+)
+
+@Serializable
+data class WebAccessPolicy(
+    val mode: String = "OFF",
+    val domains: List<String> = emptyList(),
 )
 
 @Serializable

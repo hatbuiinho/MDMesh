@@ -31,6 +31,13 @@ public interface AppUsageMapper {
     List<DeviceAppUsageDaily> report(@Param("customerId") int customerId, @Param("configurationId") Integer configurationId,
                                      @Param("from") String from, @Param("to") String to);
 
+    @Select("SELECT deviceNumber,packageName,usageDate::text AS usageDate,foregroundMs,limitReachedAt,status,updatedAt " +
+            "FROM deviceAppUsageDaily WHERE deviceNumber=#{deviceNumber} " +
+            "AND usageDate BETWEEN CAST(#{from} AS DATE) AND CAST(#{to} AS DATE) " +
+            "ORDER BY usageDate DESC,foregroundMs DESC,packageName")
+    List<DeviceAppUsageDaily> reportDevice(@Param("deviceNumber") String deviceNumber,
+                                           @Param("from") String from, @Param("to") String to);
+
     @Insert("INSERT INTO appUsageOverride(deviceNumber,packageName,extraMinutes,expiresAt,createdAt) VALUES(#{deviceNumber},#{packageName},#{extraMinutes},#{expiresAt},#{createdAt}) " +
             "ON CONFLICT(deviceNumber,packageName) DO UPDATE SET extraMinutes=EXCLUDED.extraMinutes,expiresAt=EXCLUDED.expiresAt,createdAt=EXCLUDED.createdAt")
     void upsertOverride(AppUsageOverride row);

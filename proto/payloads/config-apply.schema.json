@@ -32,6 +32,13 @@
       "description": "When enabled, hide launchable packages outside this allowlist. Agent and platform-critical packages are protected automatically."
     },
     "location": { "type": "object", "properties": { "mode": { "enum": ["passive", "active"] } } },
+    "webAccess": {
+      "type": "object", "additionalProperties": false, "required": ["mode", "domains"],
+      "properties": {
+        "mode": { "enum": ["ALLOWLIST", "BLOCKLIST"] },
+        "domains": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$" }, "uniqueItems": true }
+      }
+    },
     "appUsage": {
       "type": "object", "additionalProperties": false, "required": ["timezone", "rules"],
       "properties": {

@@ -1,9 +1,10 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from './theme';
 import { UpdateBanner } from '../components/UpdateBanner';
 import { ReloadPrompt } from '../components/ReloadPrompt';
+import { preloadRoute } from './routePrefetch';
 import {
   IconDashboard,
   IconDevices,
@@ -43,16 +44,44 @@ export function AppShell({
   const { user, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLButtonElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
   const close = () => setOpen(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : menuRef.current;
+    const sidebar = sidebarRef.current;
+    sidebar?.querySelector<HTMLElement>('a, button')?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        menuRef.current?.focus();
+        return;
+      }
+      if (event.key !== 'Tab' || !sidebar) return;
+      const focusable = [...sidebar.querySelectorAll<HTMLElement>('a, button:not(:disabled)')];
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      if (previous && document.contains(previous)) previous.focus();
+    };
+  }, [open]);
 
   return (
     <div className="shell">
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       <div
         className={`scrim ${open ? 'show' : ''}`}
         onClick={close}
         aria-hidden="true"
       />
-      <aside className={`sidebar ${open ? 'open' : ''}`}>
+      <aside ref={sidebarRef} id="primary-navigation" className={`sidebar ${open ? 'open' : ''}`} aria-label="Primary navigation">
         <div className="sidebar-brand">
           <span className="wordmark" aria-label="MDMesh">
             <span className="bullet" aria-hidden="true" />
@@ -69,6 +98,8 @@ export function AppShell({
               to={to}
               className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
               onClick={close}
+              onMouseEnter={() => preloadRoute(to)}
+              onFocus={() => preloadRoute(to)}
             >
               <Icon className="ico" />
               <span>{label}</span>
@@ -99,15 +130,18 @@ export function AppShell({
       <div className="main">
         <div className="rail-mobilebar">
           <button
+            ref={menuRef}
             className="btn btn-ghost menu-btn"
             onClick={() => setOpen((v) => !v)}
             aria-label="Toggle navigation"
+            aria-expanded={open}
+            aria-controls="primary-navigation"
           >
             <IconMenu />
           </button>
           <span style={{ fontWeight: 600 }}>{title ?? 'MDMesh'}</span>
         </div>
-        <main className="content-scroll">
+        <main id="main-content" className="content-scroll" tabIndex={-1}>
           <div className="content route-enter"><ReloadPrompt /><UpdateBanner />{children}</div>
         </main>
       </div>

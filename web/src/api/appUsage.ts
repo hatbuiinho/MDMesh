@@ -8,7 +8,7 @@ export interface AppUsageRule {
 export interface AppUsagePolicy { timezone: string; rules: AppUsageRule[] }
 export interface AppUsageReport {
   deviceNumber: string; packageName: string; usageDate: string; foregroundMs: number;
-  limitReachedAt?: number; status?: string;
+  limitReachedAt?: number; status?: string; updatedAt?: number;
 }
 
 export const getAppUsagePolicy = (configurationId: number) =>
@@ -17,5 +17,7 @@ export const saveAppUsagePolicy = (configurationId: number, policy: AppUsagePoli
   apiClient.put<AppUsagePolicy>(`/private/app-usage/configuration/${configurationId}`, policy);
 export const getAppUsageReport = (configurationId: number, from: string, to: string) =>
   apiClient.get<AppUsageReport[]>(`/private/app-usage/report?configurationId=${configurationId}&from=${from}&to=${to}`);
+export const getDeviceAppUsageReport = (deviceNumber: string, from: string, to: string, signal?: AbortSignal) =>
+  apiClient.get<AppUsageReport[]>(`/private/app-usage/device/${encodeURIComponent(deviceNumber)}/report?from=${from}&to=${to}`, signal);
 export const grantAppUsage = (deviceNumber: string, packageName: string, extraMinutes: number, expiresAt?: number) =>
   apiClient.post(`/private/app-usage/device/${encodeURIComponent(deviceNumber)}/override`, { packageName, extraMinutes, expiresAt });

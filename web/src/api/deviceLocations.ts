@@ -17,8 +17,13 @@ export interface LocationFix {
 export async function listLocations(
   deviceId: number | string,
   since = 0,
+  limit = 100,
+  before?: number,
+  signal?: AbortSignal,
 ): Promise<LocationFix[]> {
+  const beforeParam = before == null ? '' : `&before=${before}`;
   return apiClient.get<LocationFix[]>(
-    `/private/agent/v1/devices/${deviceId}/locations?since=${since}`,
+    `/private/agent/v1/devices/${deviceId}/locations?since=${since}&limit=${limit}${beforeParam}`,
+    signal,
   );
 }

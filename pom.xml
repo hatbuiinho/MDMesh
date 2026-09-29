@@ -309,11 +309,12 @@
             <version>20250517</version>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/org.mockito/mockito-all -->
+        <!-- Mockito 4 is the last line that supports Java 8 bytecode and is compatible with JDK 17.
+             The legacy mockito-all 1.x bundle uses CGLIB reflection blocked by the Java module system. -->
         <dependency>
             <groupId>org.mockito</groupId>
-            <artifactId>mockito-all</artifactId>
-            <version>1.10.19</version>
+            <artifactId>mockito-core</artifactId>
+            <version>4.11.0</version>
             <scope>test</scope>
         </dependency>
 

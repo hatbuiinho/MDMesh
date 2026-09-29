@@ -5,7 +5,8 @@ import { useDevices } from '../data/useDevices';
 import { statusMeta, isOnline as isOnlineByRecency } from '../ui/status';
 import { deviceDisplayName, deviceSecondaryId, fmtRelative } from '../ui/format';
 import { getEvents, type DeviceEvent } from '../api/events';
-import type { DeviceView, ConfigurationLookup } from '../api/devices';
+import { getFleetSummary, type FleetSummary } from '../api/summary';
+import type { DeviceView } from '../api/devices';
 
 type Bucket = 'online' | 'attention' | 'offline';
 
@@ -18,14 +19,6 @@ const EVENT_VERBS: Record<string, string> = {
   lowBattery: 'reported low battery',
   enrolled: 'enrolled',
 };
-
-function configName(
-  d: DeviceView,
-  configs: Record<string, ConfigurationLookup>,
-): string {
-  if (d.configurationId == null) return 'Unassigned';
-  return configs[String(d.configurationId)]?.name ?? 'Unassigned';
-}
 
 function bucketOf(d: DeviceView, now?: number): Bucket {
   // Offline first (recency of last check-in); a still-reporting device with a config issue is
@@ -97,8 +90,23 @@ function ActivityIcon({ type }: { type: string }) {
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const { devices, total, configurations, loading, error } = useDevices();
+  const { devices, loading, error, reload, lastUpdated } = useDevices({ pageSize: 50, sortBy: 'LAST_UPDATE', sortDir: 'DESC' });
   const [activity, setActivity] = useState<ActivityItem[] | null>(null);
+  const [summary, setSummary] = useState<FleetSummary | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  const loadSummary = () => {
+    const controller = new AbortController();
+    setSummaryError(null);
+    void getFleetSummary(controller.signal).then(setSummary).catch((err: unknown) => {
+      if (!(err instanceof DOMException && err.name === 'AbortError')) setSummaryError('Failed to load fleet summary.');
+    });
+    return controller;
+  };
+  useEffect(() => {
+    const controller = loadSummary();
+    return () => controller.abort();
+  }, []);
 
   // Tick every 30s so the online/attention/offline split decays as devices go quiet.
   const [now, setNow] = useState(() => Date.now());
@@ -107,7 +115,7 @@ export function DashboardPage() {
     return () => clearInterval(t);
   }, []);
 
-  const counts = useMemo(() => {
+  const pageCounts = useMemo(() => {
     let online = 0,
       attention = 0,
       offline = 0;
@@ -120,7 +128,14 @@ export function DashboardPage() {
     return { online, attention, offline };
   }, [devices, now]);
 
-  const shown = devices.length;
+  const counts = useMemo(() => {
+    if (!summary) return pageCounts;
+    const value = (key: string) => summary.statusSummary?.find((item) => item.stringAttr === key)?.number ?? 0;
+    return { online: value('green'), attention: value('yellow'), offline: value('red') };
+  }, [summary, pageCounts]);
+
+  const total = summary?.devicesTotal ?? devices.length;
+  const shown = total;
   const pct = (n: number) => (shown ? `${(n / shown) * 100}%` : '0%');
 
   const attention = useMemo(
@@ -132,14 +147,9 @@ export function DashboardPage() {
     [devices, now],
   );
 
-  const byConfig = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const d of devices) {
-      const n = configName(d, configurations);
-      m.set(n, (m.get(n) ?? 0) + 1);
-    }
-    return [...m.entries()].sort((a, b) => b[1] - a[1]);
-  }, [devices, configurations]);
+  const byConfig = useMemo(() => summary?.topConfigs?.map((name, i) => [name,
+    (summary.statusOnlineByConfig?.[i] ?? 0) + (summary.statusIdleByConfig?.[i] ?? 0) + (summary.statusOfflineByConfig?.[i] ?? 0),
+  ] as [string, number]) ?? [], [summary]);
 
   // Cross-fleet activity: pull recent events for the most-recently-active
   // devices and merge. Per-device endpoint, so cap the fan-out.
@@ -152,7 +162,7 @@ export function DashboardPage() {
     let cancelled = false;
     const top = [...devices]
       .sort((a, b) => (b.lastUpdate ?? 0) - (a.lastUpdate ?? 0))
-      .slice(0, 12);
+      .slice(0, 6);
     void Promise.allSettled(
       top.map((d) => getEvents(d.number).then((evs) => ({ d, evs }))),
     ).then((results) => {
@@ -178,7 +188,12 @@ export function DashboardPage() {
         <h1>Overview</h1>
       </div>
 
-      {error && <div className="banner banner-alert">{error}</div>}
+      {(error || summaryError) && (
+        <div className="banner banner-alert" role="alert">
+          <span>{error ?? summaryError}{lastUpdated ? ` Showing device data from ${new Date(lastUpdated).toLocaleTimeString()}.` : ''}</span>
+          <button className="btn btn-sm" onClick={() => { void reload(); loadSummary(); }}>Retry</button>
+        </div>
+      )}
 
       <div className="panel fleet">
         <div className="fleet-big">
@@ -238,9 +253,12 @@ export function DashboardPage() {
                   tabIndex={0}
                   style={{ cursor: 'pointer' }}
                   onClick={() => navigate(`/devices/${encodeURIComponent(a.device.number)}`)}
-                  onKeyDown={(e) =>
-                    e.key === 'Enter' && navigate(`/devices/${encodeURIComponent(a.device.number)}`)
-                  }
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      navigate(`/devices/${encodeURIComponent(a.device.number)}`);
+                    }
+                  }}
                 >
                   <span className="feed-ic">
                     <ActivityIcon type={a.ev.type} />
@@ -288,9 +306,12 @@ export function DashboardPage() {
                       role="button"
                       tabIndex={0}
                       onClick={() => navigate(`/devices/${encodeURIComponent(d.number)}`)}
-                      onKeyDown={(e) =>
-                        e.key === 'Enter' && navigate(`/devices/${encodeURIComponent(d.number)}`)
-                      }
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          navigate(`/devices/${encodeURIComponent(d.number)}`);
+                        }
+                      }}
                     >
                       <span className={`dot dot-${m.tone}`} />
                       <span className="att-nm"><b>{deviceDisplayName(d)}</b>{deviceSecondaryId(d) && <small className="mono">{deviceSecondaryId(d)}</small>}</span>

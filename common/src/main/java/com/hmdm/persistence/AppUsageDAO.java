@@ -59,6 +59,7 @@ public class AppUsageDAO {
     }
     public void upsert(DeviceAppUsageDaily row) { mapper.upsertDaily(row); }
     public List<DeviceAppUsageDaily> report(int customerId, Integer configurationId, String from, String to) { return mapper.report(customerId, configurationId, from, to); }
+    public List<DeviceAppUsageDaily> reportDevice(String deviceNumber, String from, String to) { return mapper.reportDevice(deviceNumber, from, to); }
     public void override(AppUsageOverride row) { mapper.upsertOverride(row); }
     public List<AppUsageOverride> overrides(int configurationId) { return mapper.activeOverrides(configurationId, System.currentTimeMillis()); }
 }

@@ -70,20 +70,42 @@ export function ConfigurationsPage() {
   const [chooserOpen, setChooserOpen] = useState(false);
   const [copyOf, setCopyOf] = useState<Configuration | null>(null);
   const [sync, setSync] = useState<Record<number, ConfigSyncSummary>>({});
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<'all' | 'kiosk' | 'used' | 'attention'>('all');
 
-  const load = () =>
-    getConfigurations()
-      .then(setConfigs)
-      .catch(() => {
-        setConfigs([]);
-        setError('Could not load configurations.');
-      })
-      .then(() => getSyncSummary().then((rows) => setSync(Object.fromEntries(rows.map((r) => [r.configurationId, r])))).catch(() => undefined));
+  const load = async () => {
+    setError(null);
+    const [configResult, syncResult] = await Promise.allSettled([getConfigurations(), getSyncSummary()]);
+    if (configResult.status === 'fulfilled') setConfigs(configResult.value);
+    else { setConfigs([]); setError('Could not load configurations.'); }
+    if (syncResult.status === 'fulfilled') setSync(Object.fromEntries(syncResult.value.map((r) => [r.configurationId, r])));
+  };
 
   useEffect(() => {
     void load();
-    listApplications().then((a) => setApps(a.filter((x) => (x.type ?? 'app') !== 'web'))).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!editing || apps.length) return;
+    let cancelled = false;
+    void listApplications().then((rows) => {
+      if (!cancelled) setApps(rows.filter((x) => (x.type ?? 'app') !== 'web'));
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [apps.length, editing]);
+
+  const visibleConfigs = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return (configs ?? []).filter((c) => {
+      const row = c.id == null ? undefined : sync[c.id];
+      const matchesQuery = !q || c.name.toLowerCase().includes(q) || String(c.description ?? '').toLowerCase().includes(q);
+      const matchesFilter = filter === 'all'
+        || (filter === 'kiosk' && c.kioskMode === true)
+        || (filter === 'used' && (row?.total ?? 0) > 0)
+        || (filter === 'attention' && ((row?.outOfSync ?? 0) + (row?.neverSeen ?? 0)) > 0);
+      return matchesQuery && matchesFilter;
+    });
+  }, [configs, filter, query, sync]);
 
   if (editing) {
     return (
@@ -118,13 +140,23 @@ export function ConfigurationsPage() {
 
       {error && <div className="banner banner-alert">{error}</div>}
 
+      <div className="cfg-list-toolbar">
+        <input className="input" type="search" placeholder="Search configurations…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <select className="sel" value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)} aria-label="Filter configurations">
+          <option value="all">All configurations</option>
+          <option value="kiosk">Kiosk</option>
+          <option value="used">Assigned to devices</option>
+          <option value="attention">Needs attention</option>
+        </select>
+      </div>
+
       {configs === null ? (
         <div className="panel"><div className="empty"><span className="spin" /> Loading…</div></div>
       ) : configs.length === 0 ? (
         <div className="panel"><div className="empty"><span className="label">No configurations</span>Create one to use as a device template.</div></div>
       ) : (
         <div className="cfg-grid">
-          {configs.map((c) => (
+          {visibleConfigs.map((c) => (
             <ConfigCard
               key={c.id}
               c={c}
@@ -139,6 +171,7 @@ export function ConfigurationsPage() {
               onDelete={() => void doDelete(c)}
             />
           ))}
+          {!visibleConfigs.length && <div className="panel empty">No configurations match these filters.</div>}
         </div>
       )}
 
@@ -341,6 +374,7 @@ function ConfigEditor({
   // comparisons don't see a spurious apps diff on every save.
   const [baseline, setBaseline] = useState<Configuration>(() => ({ ...initial }));
   const [advanced, setAdvanced] = useState(false);
+  const [activeSection, setActiveSection] = useState<string>(() => GROUP_ORDER[0] ?? 'Applications');
   const [busy, setBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmKeys, setConfirmKeys] = useState<string[] | null>(null);
@@ -414,6 +448,20 @@ function ConfigEditor({
       toast.push('err', 'Allowed app required', 'Add an app with the Install action or enter an allowed system package before enabling the app allowlist.');
       return;
     }
+    const webMode = String(draft.webAccessMode ?? 'OFF');
+    const webDomains = String(draft.webAccessDomains ?? '').split(/[,\s]+/).map((v) => v.trim()).filter(Boolean);
+    if (webMode === 'ALLOWLIST' && webDomains.length === 0) {
+      toast.push('err', 'Allowed domain required', 'Add at least one domain before enabling the web allowlist.');
+      return;
+    }
+    const invalidDomain = webDomains.find((raw) => {
+      const domain = raw.toLowerCase().replace(/^\*\./, '');
+      return domain.includes('://') || domain.includes('/') || !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(domain);
+    });
+    if (invalidDomain) {
+      toast.push('err', 'Invalid domain', `Use a hostname without protocol or path: ${invalidDomain}`);
+      return;
+    }
     const keys = isNew ? [] : kioskAffectingChanges(baseline, draft);
     // deviceCount null = unknown -> confirm anyway (fail closed); 0 = no device will re-apply.
     if (keys.length > 0 && deviceCount !== 0) { setConfirmKeys(keys); return; }
@@ -443,11 +491,22 @@ function ConfigEditor({
     group: g,
     fields: LEGACY_FIELDS.filter((f) => f.group === g),
   })).filter((x) => x.fields.length > 0);
+  const sectionKeys = [...enforcedByGroup.map((x) => x.group), 'Applications', 'App usage', 'Legacy fields'];
+  const dirty = useMemo(() => !readOnly && JSON.stringify(draft) !== JSON.stringify(baseline), [baseline, draft, readOnly]);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+  const safeCancel = () => {
+    if (!dirty || window.confirm('Discard unsaved configuration changes?')) onCancel();
+  };
 
   return (
     <>
       <div className="crumb">
-        <a href="/configs" onClick={(e) => { e.preventDefault(); onCancel(); }}>Configurations</a>
+        <a href="/configs" onClick={(e) => { e.preventDefault(); safeCancel(); }}>Configurations</a>
         {' / '}{isNew ? 'New' : String(initial.name)}
       </div>
 
@@ -456,7 +515,8 @@ function ConfigEditor({
           {isNew ? 'New configuration' : String(initial.name)}
         </h1>
         <div style={{ flex: 1 }} />
-        <button className="btn" onClick={onCancel} disabled={busy}>{readOnly ? 'Back' : 'Cancel'}</button>
+        {dirty && <span className="cfg-unsaved">Unsaved changes</span>}
+        <button className="btn" onClick={safeCancel} disabled={busy}>{readOnly ? 'Back' : 'Cancel'}</button>
         {readOnly ? (
           <button className="btn btn-primary" onClick={onDuplicate}>Duplicate to edit</button>
         ) : (
@@ -491,16 +551,26 @@ function ConfigEditor({
         </div>
       )}
 
-      {enforcedByGroup.map(({ group, fields }) => (
+      <div className="cfg-editor-layout">
+        <nav className="cfg-section-nav" aria-label="Configuration sections">
+          <select className="sel cfg-section-select" value={activeSection} onChange={(e) => setActiveSection(e.target.value)} aria-label="Configuration section">
+            {sectionKeys.map((section) => <option key={section}>{section}</option>)}
+          </select>
+          <div className="cfg-section-buttons">
+            {sectionKeys.map((section) => <button key={section} type="button" className={activeSection === section ? 'on' : ''} onClick={() => setActiveSection(section)}>{section}</button>)}
+          </div>
+        </nav>
+        <main className="cfg-editor-content">
+      {enforcedByGroup.filter(({ group }) => group === activeSection).map(({ group, fields }) => (
         <section className="panel cfg-panel" key={group}>
           <div className="cfg-sec-h">{group}</div>
-          {fields.map((f) => (
+          {fields.filter((f) => f.key !== 'webAccessDomains' || draft.webAccessMode !== 'OFF').map((f) => (
             <Field key={f.key} def={f} value={draft[f.key]} apps={apps} assigned={allowed} disabled={readOnly} onChange={(v) => set(f.key, v)} />
           ))}
         </section>
       ))}
 
-      <section className="panel cfg-panel">
+      {activeSection === 'Applications' && <section className="panel cfg-panel">
         <div className="cfg-sec-h" style={{ display: 'flex', alignItems: 'center' }}>
           <span>Allowed apps</span>
           {!readOnly && (
@@ -532,15 +602,15 @@ function ConfigEditor({
             )}
           </div>
         ))}
-      </section>
+      </section>}
 
-      <section className="panel cfg-panel">
+      {activeSection === 'App usage' && <section className="panel cfg-panel">
         <div className="cfg-sec-h">App usage limits</div>
         <p className="note">Daily quotas and allowed time windows are enforced locally, including while devices are offline.</p>
         <AppUsagePolicyEditor configurationId={initial.id} apps={allowed} readOnly={readOnly} />
-      </section>
+      </section>}
 
-      <button className="cfg-adv-toggle" onClick={() => setAdvanced((v) => !v)}>
+      {activeSection === 'Legacy fields' && <><button className="cfg-adv-toggle" onClick={() => setAdvanced((v) => !v)}>
         {advanced ? '▾' : '▸'} Legacy Headwind fields ({LEGACY_FIELDS.length}) — not applied by the MDMesh agent
       </button>
       {advanced && (
@@ -555,7 +625,9 @@ function ConfigEditor({
               <Field key={f.key} def={f} value={draft[f.key]} apps={apps} assigned={allowed} disabled={readOnly} onChange={(v) => set(f.key, v)} />
             ))}
           </section>
-        ))}
+        ))}</>}
+        </main>
+      </div>
 
       {pickerOpen && (
         <AppPicker

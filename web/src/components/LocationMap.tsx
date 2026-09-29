@@ -3,6 +3,8 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { LocationFix } from '../api/deviceLocations';
 
+const MAX_MARKERS = 200;
+
 /**
  * Leaflet + OpenStreetMap breadcrumb map. [fixes] are newest-first (as the API returns them);
  * we draw the trail chronologically with a polyline + circle markers and highlight the latest fix.
@@ -35,7 +37,11 @@ export function LocationMap({ fixes }: { fixes: LocationFix[] }) {
     const chrono = [...fixes].reverse();
     const pts = chrono.map((f) => [f.lat, f.lon] as [number, number]);
     L.polyline(pts, { color: '#3b82f6', weight: 3, opacity: 0.65 }).addTo(layer);
+    // A long trail remains fully represented by the lightweight polyline, while marker sampling
+    // prevents hundreds or thousands of interactive Leaflet layers from slowing down mobile UI.
+    const markerStep = Math.max(1, Math.ceil(fixes.length / MAX_MARKERS));
     fixes.forEach((f, i) => {
+      if (i !== 0 && i !== fixes.length - 1 && i % markerStep !== 0) return;
       const latest = i === 0;
       L.circleMarker([f.lat, f.lon], {
         radius: latest ? 7 : 4,

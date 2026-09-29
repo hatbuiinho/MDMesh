@@ -58,6 +58,21 @@ public class AppUsageResource {
         return Response.OK(dao.report(customer, configurationId, from, to));
     }
 
+    /** Device-detail report. Ownership is checked before querying usage so device numbers cannot
+     * be used to enumerate another tenant's data. A bounded range keeps the response predictable. */
+    @GET @Path("/device/{number}/report")
+    public Response deviceReport(@PathParam("number") String number,
+                                 @QueryParam("from") String from, @QueryParam("to") String to) {
+        Integer customer=customer(); if (customer==null) return Response.PERMISSION_DENIED();
+        Device device=unsecure.getDeviceByNumber(number);
+        if (device==null || device.getCustomerId()!=customer.intValue()) return Response.PERMISSION_DENIED();
+        LocalDate start, end;
+        try { start=LocalDate.parse(from); end=LocalDate.parse(to); }
+        catch (Exception e) { return Response.ERROR("from/to must use YYYY-MM-DD"); }
+        if (end.isBefore(start) || start.plusDays(90).isBefore(end)) return Response.ERROR("Date range must be 1-91 days");
+        return Response.OK(dao.reportDevice(number, from, to));
+    }
+
     public static class GrantRequest { public String packageName; public Integer extraMinutes; public Long expiresAt; }
     @POST @Path("/device/{number}/override") @Consumes(MediaType.APPLICATION_JSON)
     public Response grant(@PathParam("number") String number, GrantRequest body) {

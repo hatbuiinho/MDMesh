@@ -2932,4 +2932,27 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="26.09.28-agent-command-latest-type-index" author="mdmesh" context="common">
+        <comment>Fast lookup of the latest completed command snapshot by device and type.</comment>
+        <sql>
+            CREATE INDEX ix_agentCommand_device_type_status_id
+                ON agentCommand(deviceNumber, type, status, id DESC);
+        </sql>
+        <rollback>
+            DROP INDEX ix_agentCommand_device_type_status_id;
+        </rollback>
+    </changeSet>
+
+    <changeSet id="26.09.29-web-access-policy" author="mdmesh" context="common">
+        <comment>Per-configuration domain access policy enforced by the device local VPN.</comment>
+        <sql>
+            ALTER TABLE configurations ADD COLUMN webAccessMode VARCHAR(16) NOT NULL DEFAULT 'OFF';
+            ALTER TABLE configurations ADD COLUMN webAccessDomains TEXT;
+        </sql>
+        <rollback>
+            ALTER TABLE configurations DROP COLUMN webAccessDomains;
+            ALTER TABLE configurations DROP COLUMN webAccessMode;
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

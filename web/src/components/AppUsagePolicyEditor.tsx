@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getAppUsagePolicy, getAppUsageReport, grantAppUsage, saveAppUsagePolicy, type AppUsagePolicy, type AppUsageRule, type AppUsageReport, type AppUsageWindow } from '../api/appUsage';
+import { getAppUsagePolicy, saveAppUsagePolicy, type AppUsagePolicy, type AppUsageRule, type AppUsageWindow } from '../api/appUsage';
 import type { ConfigApp } from '../api/configurations';
 import { useToast } from '../ui/toast';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const WEEKDAYS = [1, 2, 3, 4, 5], WEEKEND = [6, 7], EVERY_DAY = [1, 2, 3, 4, 5, 6, 7];
-const iso = (d: Date) => d.toISOString().slice(0, 10);
 const clone = (p: AppUsagePolicy): AppUsagePolicy => JSON.parse(JSON.stringify(p)) as AppUsagePolicy;
 const browserZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 const zones = (current: string) => {
@@ -39,7 +38,7 @@ export function AppUsagePolicyEditor({ configurationId, apps, readOnly }: { conf
   const toast = useToast();
   const initial = useMemo<AppUsagePolicy>(() => ({ timezone: browserZone(), rules: [] }), []);
   const [policy, setPolicy] = useState(initial), [saved, setSaved] = useState(initial);
-  const [report, setReport] = useState<AppUsageReport[]>([]), [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), [reload, setReload] = useState(0);
   const [picker, setPicker] = useState(false), [query, setQuery] = useState('');
 
@@ -47,8 +46,6 @@ export function AppUsagePolicyEditor({ configurationId, apps, readOnly }: { conf
     if (!configurationId) return;
     let cancelled = false; setLoading(true); setError('');
     void getAppUsagePolicy(configurationId).then((p) => { if (!cancelled) { const value = { ...p, rules: p.rules ?? [] }; setPolicy(clone(value)); setSaved(clone(value)); } }).catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load policy.'); }).finally(() => { if (!cancelled) setLoading(false); });
-    const now = new Date(), from = new Date(now.getTime() - 6 * 86400000);
-    void getAppUsageReport(configurationId, iso(from), iso(now)).then((value) => { if (!cancelled) setReport(value); }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [configurationId, reload]);
 
@@ -68,7 +65,6 @@ export function AppUsagePolicyEditor({ configurationId, apps, readOnly }: { conf
     if (selected.some((pkg) => !packages.includes(pkg)) || new Set(selected).size !== selected.length) return toast.push('err', 'Invalid app', 'Every rule must use a unique installed app.');
     setBusy(true); try { const value = await saveAppUsagePolicy(configurationId, policy); const normalized = value ?? policy; setPolicy(clone(normalized)); setSaved(clone(normalized)); toast.push('ok', 'App usage saved', 'Devices will apply it at their next check-in.'); } catch (e) { toast.push('err', 'Save failed', e instanceof Error ? e.message : ''); } finally { setBusy(false); }
   };
-  const grant = async (row: AppUsageReport) => { try { await grantAppUsage(row.deviceNumber, row.packageName, 60); toast.push('ok', 'Extra time granted', `${row.deviceNumber} can use ${row.packageName} for 60 more minutes today.`); } catch (e) { toast.push('err', 'Grant failed', e instanceof Error ? e.message : ''); } };
 
   if (loading) return <div className="usage-loading" role="status">Loading app usage policy…</div>;
   if (error) return <div className="banner banner-alert usage-load-error" role="alert"><span><b>Could not load app usage policy.</b><br />{error}</span><button className="btn btn-sm" onClick={() => setReload((v) => v + 1)}>Retry</button></div>;
@@ -82,6 +78,5 @@ export function AppUsagePolicyEditor({ configurationId, apps, readOnly }: { conf
       {r.allowedWindows.map((w, wi) => { const validation = windowError(w); return <div className={`usage-window${validation ? ' has-error' : ''}`} key={wi}><div className="usage-day-presets">{!readOnly && <div className="usage-presets"><button type="button" onClick={() => updateWindow(ri, wi, { days: WEEKDAYS })}>Weekdays</button><button type="button" onClick={() => updateWindow(ri, wi, { days: WEEKEND })}>Weekend</button><button type="button" onClick={() => updateWindow(ri, wi, { days: EVERY_DAY })}>Every day</button></div>}<div className="usage-days">{DAYS.map((day, di) => <label key={day}><input type="checkbox" disabled={readOnly} checked={w.days.includes(di + 1)} onChange={(e) => updateWindow(ri, wi, { days: e.target.checked ? [...w.days, di + 1].sort() : w.days.filter((d) => d !== di + 1) })} /><span>{day}</span></label>)}</div></div><label className="usage-time">From<input className="input" type="time" disabled={readOnly} value={w.from} onChange={(e) => updateWindow(ri, wi, { from: e.target.value })} /></label><label className="usage-time">To<input className="input" type="time" disabled={readOnly} value={w.to} onChange={(e) => updateWindow(ri, wi, { to: e.target.value })} /></label>{!readOnly && <button className="btn btn-sm btn-ghost usage-window-remove" onClick={() => update(ri, { allowedWindows: r.allowedWindows.filter((_, n) => n !== wi) })}>Remove window</button>}{validation && <div className="usage-window-error">{validation}</div>}</div>; })}
     </article>; })}</div>
     {!readOnly && <div className="usage-actions"><div className="usage-app-add-wrap"><button className="btn" disabled={!choices.length && !picker} onClick={() => setPicker((v) => !v)}>+ Add app limit</button>{picker && <div className="usage-app-menu"><input className="input" type="search" autoFocus placeholder="Search by app name or package…" value={query} onChange={(e) => setQuery(e.target.value)} /><div className="usage-app-results">{choices.map((app) => <button key={app.pkg} type="button" onClick={() => addApp(app)}><strong>{app.name || app.pkg}</strong><span className="mono">{app.pkg}</span></button>)}{!choices.length && <div>No matching installed apps.</div>}</div></div>}</div><span className="usage-save-state">{dirty ? 'Unsaved changes' : 'All changes saved'}</span><button className="btn" disabled={!dirty || busy} onClick={() => setPolicy(clone(saved))}>Discard</button><button className="btn btn-primary" disabled={!dirty || busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save changes'}</button></div>}
-    {!!report.length && <div className="usage-report"><h4>Last 7 days</h4><table><thead><tr><th>Device</th><th>App</th><th>Date</th><th>Usage</th><th>Status</th><th /></tr></thead><tbody>{report.slice(0, 100).map((x, n) => <tr key={n}><td>{x.deviceNumber}</td><td className="mono">{x.packageName}</td><td>{x.usageDate}</td><td>{Math.round(x.foregroundMs / 60000)} min</td><td>{x.status ?? '—'}</td><td>{!readOnly && x.usageDate === iso(new Date()) && <button className="btn btn-sm" onClick={() => void grant(x)}>+60 min</button>}</td></tr>)}</tbody></table></div>}
   </>;
 }

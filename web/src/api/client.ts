@@ -76,6 +76,7 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   try {
     res = await fetch(url, init);
   } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') throw e;
     throw new ApiError(
       `Network error contacting the server: ${(e as Error).message}`,
       'ERROR',

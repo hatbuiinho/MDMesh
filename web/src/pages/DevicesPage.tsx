@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AppShell } from '../ui/AppShell';
 import { DeviceGlyph } from '../ui/DeviceGlyph';
 import { useDevices } from '../data/useDevices';
 import { isOnline as isOnlineByRecency } from '../ui/status';
+import { ONLINE_WINDOW_MS } from '../ui/status';
 import { useToast } from '../ui/toast';
 import { deviceDisplayName, deviceSecondaryId, fmtRelative, orDash } from '../ui/format';
 import {
@@ -16,7 +17,6 @@ import { listConfigurations, type ConfigurationSummary } from '../api/configurat
 import { BulkActionModal } from '../components/BulkActionModal';
 import { Modal } from '../ui/Modal';
 
-type View = 'grid' | 'list';
 type StatusFilter = 'all' | 'online' | 'offline';
 
 function configName(
@@ -61,14 +61,49 @@ function IconList() {
 
 export function DevicesPage() {
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const toast = useToast();
-  const { devices, total, configurations, loading, error, reload } = useDevices();
-  const [view, setView] = useState<View>('grid');
-  const [status, setStatus] = useState<StatusFilter>('all');
-  const [config, setConfig] = useState('all');
-  const [android, setAndroid] = useState('all');
-  const [q, setQ] = useState('');
-  const [dupOnly, setDupOnly] = useState(false);
+  const pageSize = 50;
+  const page = Math.max(1, Number(params.get('page')) || 1);
+  const view = params.get('view') === 'grid' ? 'grid' : 'list';
+  const status = (['online', 'offline'].includes(params.get('status') ?? '') ? params.get('status') : 'all') as StatusFilter;
+  const config = params.get('config') ?? 'all';
+  const android = params.get('android') ?? 'all';
+  const sort = params.get('sort') ?? 'recent';
+  const dupOnly = params.get('duplicates') === '1';
+  const urlQuery = params.get('q') ?? '';
+  const [q, setQ] = useState(urlQuery);
+  const request = useMemo(() => ({
+    value: urlQuery,
+    pageNum: page,
+    pageSize,
+    configurationId: config === 'all' ? undefined : Number(config),
+    androidVersion: android === 'all' ? undefined : android,
+    onlineLaterMillis: status === 'online' ? ONLINE_WINDOW_MS : undefined,
+    onlineEarlierMillis: status === 'offline' ? ONLINE_WINDOW_MS : undefined,
+    sortBy: sort === 'name' ? 'DESCRIPTION' : sort === 'config' ? 'CONFIGURATION' : sort === 'android' ? 'ANDROID_VERSION' : 'LAST_UPDATE',
+    sortDir: sort === 'recent' ? 'DESC' as const : 'ASC' as const,
+  }), [urlQuery, page, config, android, status, sort]);
+  const { devices, total, configurations, loading, refreshing, error, lastUpdated, reload } = useDevices(request);
+
+  const updateParams = (changes: Record<string, string | null>, resetPage = true) => {
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      for (const [key, value] of Object.entries(changes)) {
+        if (!value || value === 'all' || (key === 'view' && value === 'list')) next.delete(key);
+        else next.set(key, value);
+      }
+      if (resetPage) next.delete('page');
+      return next;
+    }, { replace: true });
+  };
+  const clearFilters = () => {
+    setQ('');
+    const keep: Record<string, string> = {};
+    if (view === 'grid') keep.view = 'grid';
+    if (sort !== 'recent') keep.sort = sort;
+    setParams(keep, { replace: true });
+  };
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [allConfigs, setAllConfigs] = useState<ConfigurationSummary[]>([]);
@@ -77,6 +112,17 @@ export function DevicesPage() {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [target, setTarget] = useState('');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setSelected(new Set());
+  }, [page, urlQuery, status, config, android, dupOnly, sort]);
+
+  useEffect(() => {
+    const pageCount = Math.max(1, Math.ceil(total / pageSize));
+    if (!loading && page > pageCount) updateParams({ page: String(pageCount) }, false);
+  // updateParams intentionally derives from current URL state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, page, total]);
 
   useEffect(() => {
     listConfigurations()
@@ -91,14 +137,16 @@ export function DevicesPage() {
     return () => clearInterval(t);
   }, []);
 
-  // Server-side search: the list is capped at one page, so let the query hit the API too
-  // (debounced); the client-side filters below still apply on top of what came back.
-  const firstSearch = useRef(true);
+  // Debounce the URL itself so back/forward and shared links preserve the query.
   useEffect(() => {
-    if (firstSearch.current) { firstSearch.current = false; return; } // mount load is in useDevices
-    const t = setTimeout(() => { void reload(q.trim()); }, 300);
+    if (q === urlQuery) return;
+    const t = setTimeout(() => updateParams({ q: q.trim() || null }), 300);
     return () => clearTimeout(t);
-  }, [q, reload]);
+  // updateParams intentionally derives from the latest search params.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, urlQuery]);
+
+  useEffect(() => setQ(urlQuery), [urlQuery]);
 
   const onlineCount = useMemo(
     () => devices.filter((d) => isOnline(d, now)).length,
@@ -117,15 +165,6 @@ export function DevicesPage() {
     [devices, dupCount],
   );
 
-  const configOptions = useMemo(() => {
-    const names = new Set<string>();
-    for (const d of devices) {
-      const n = configName(d, configurations);
-      if (n !== '—') names.add(n);
-    }
-    return [...names].sort();
-  }, [devices, configurations]);
-
   const androidOptions = useMemo(() => {
     const v = new Set<string>();
     for (const d of devices) if (d.androidVersion) v.add(d.androidVersion);
@@ -133,20 +172,11 @@ export function DevicesPage() {
   }, [devices]);
 
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
     return devices.filter((d) => {
-      if (status === 'online' && !isOnline(d, now)) return false;
-      if (status === 'offline' && isOnline(d, now)) return false;
-      if (config !== 'all' && configName(d, configurations) !== config) return false;
-      if (android !== 'all' && d.androidVersion !== android) return false;
       if (dupOnly && (d.hardwareId ? (dupCount.get(d.hardwareId) ?? 0) : 0) <= 1) return false;
-      if (needle) {
-        const hay = `${d.number ?? ''} ${d.description ?? ''}`.toLowerCase();
-        if (!hay.includes(needle)) return false;
-      }
       return true;
     });
-  }, [devices, status, config, android, q, dupOnly, dupCount, configurations, now]);
+  }, [devices, dupOnly, dupCount]);
 
   // Route by number (not id) so the detail page can fetch the device with a narrow search.
   const go = (d: DeviceView) => navigate(`/devices/${encodeURIComponent(d.number)}`);
@@ -203,7 +233,7 @@ export function DevicesPage() {
       <div className="dv-head">
         <h1>Devices</h1>
         <span className="dv-count">
-          {total > devices.length ? `${devices.length} of ${total}` : devices.length} total · {onlineCount} online
+          {total} total · {onlineCount} online on this page
         </span>
         <div className="dv-spacer" />
         <div className="dv-search">
@@ -216,10 +246,10 @@ export function DevicesPage() {
           />
         </div>
         <div className="toggle" role="group" aria-label="View">
-          <button className={view === 'grid' ? 'on' : ''} onClick={() => setView('grid')} aria-label="Grid view" title="Grid">
+          <button className={view === 'grid' ? 'on' : ''} onClick={() => updateParams({ view: 'grid' }, false)} aria-label="Grid view" title="Grid">
             <IconGrid />
           </button>
-          <button className={view === 'list' ? 'on' : ''} onClick={() => setView('list')} aria-label="List view" title="List">
+          <button className={view === 'list' ? 'on' : ''} onClick={() => updateParams({ view: 'list' }, false)} aria-label="List view" title="List">
             <IconList />
           </button>
         </div>
@@ -229,37 +259,48 @@ export function DevicesPage() {
       </div>
 
       <div className="filters">
-        <button className={`filter-chip ${status === 'all' ? 'on' : ''}`} onClick={() => setStatus('all')}>
-          All <b>{devices.length}</b>
+        <button className={`filter-chip ${status === 'all' ? 'on' : ''}`} onClick={() => updateParams({ status: null })}>
+          All {status === 'all' && <b>{total}</b>}
         </button>
-        <button className={`filter-chip ${status === 'online' ? 'on' : ''}`} onClick={() => setStatus('online')}>
-          Online <b>{onlineCount}</b>
+        <button className={`filter-chip ${status === 'online' ? 'on' : ''}`} onClick={() => updateParams({ status: 'online' })}>
+          Online {status === 'online' && <b>{total}</b>}
         </button>
-        <button className={`filter-chip ${status === 'offline' ? 'on' : ''}`} onClick={() => setStatus('offline')}>
-          Offline <b>{devices.length - onlineCount}</b>
+        <button className={`filter-chip ${status === 'offline' ? 'on' : ''}`} onClick={() => updateParams({ status: 'offline' })}>
+          Offline {status === 'offline' && <b>{total}</b>}
         </button>
         {dupTotal > 0 && (
           <button
             className={`filter-chip dup ${dupOnly ? 'on' : ''}`}
-            onClick={() => setDupOnly((v) => !v)}
+            onClick={() => updateParams({ duplicates: dupOnly ? null : '1' })}
             title="Devices that share a hardware id with another row — likely the same physical device enrolled more than once"
           >
             ⚠ Duplicates <b>{dupTotal}</b>
           </button>
         )}
         <span className="filter-div" />
-        <select className="sel" value={config} onChange={(e) => setConfig(e.target.value)} aria-label="Filter by configuration">
+        <select className="sel" value={config} onChange={(e) => updateParams({ config: e.target.value })} aria-label="Filter by configuration">
           <option value="all">Config: All</option>
-          {configOptions.map((c) => (
-            <option key={c} value={c}>{c}</option>
+          {allConfigs.map((c) => (
+            <option key={c.id} value={String(c.id)}>{c.name}</option>
           ))}
         </select>
-        <select className="sel" value={android} onChange={(e) => setAndroid(e.target.value)} aria-label="Filter by Android version">
+        <select className="sel" value={android} onChange={(e) => updateParams({ android: e.target.value })} aria-label="Filter by Android version">
           <option value="all">Android: All</option>
           {androidOptions.map((a) => (
             <option key={a} value={a}>Android {a}</option>
           ))}
         </select>
+        <select className="sel" value={sort} onChange={(e) => updateParams({ sort: e.target.value })} aria-label="Sort devices">
+          <option value="recent">Sort: Recently seen</option>
+          <option value="name">Sort: Name</option>
+          <option value="config">Sort: Configuration</option>
+          <option value="android">Sort: Android</option>
+        </select>
+        {(status !== 'all' || config !== 'all' || android !== 'all' || dupOnly || urlQuery) && (
+          <button className="btn btn-sm btn-ghost" onClick={clearFilters}>
+            Clear filters
+          </button>
+        )}
       </div>
 
       {selected.size > 0 && (
@@ -286,19 +327,31 @@ export function DevicesPage() {
         </div>
       )}
 
-      {error && <div className="banner banner-alert">{error}</div>}
+      {error && (
+        <div className="banner banner-alert" role="alert">
+          <span>{error}{lastUpdated ? ` Showing data from ${new Date(lastUpdated).toLocaleTimeString()}.` : ''}</span>
+          <button className="btn btn-sm" onClick={() => void reload()}>Retry</button>
+        </div>
+      )}
+      {refreshing && <div className="list-refresh" role="status"><span className="spin" /> Updating devices…</div>}
 
       {loading ? (
-        <div className="panel">
-          <div className="empty">
-            <span className="spin" /> Loading devices…
-          </div>
+        <div className="device-skeletons" aria-label="Loading devices" role="status">
+          {Array.from({ length: 6 }, (_, i) => <div className="device-skeleton" key={i}><i /><i /><i /></div>)}
         </div>
       ) : filtered.length === 0 ? (
         <div className="panel">
           <div className="empty">
             <span className="label">No devices</span>
             {devices.length === 0 ? 'No devices are enrolled yet.' : 'No devices match these filters.'}
+            <div className="empty-actions">
+              {status !== 'all' || config !== 'all' || android !== 'all' || dupOnly || urlQuery ? (
+                <button className="btn" onClick={clearFilters}>Clear filters</button>
+              ) : (
+                <button className="btn btn-dark" onClick={() => navigate('/enroll')}>Enroll device</button>
+              )}
+              {error && <button className="btn" onClick={() => void reload()}>Retry</button>}
+            </div>
           </div>
         </div>
       ) : (
@@ -351,6 +404,13 @@ export function DevicesPage() {
                 />
               ))}
             </div>
+          )}
+          {total > pageSize && (
+            <nav className="pager" aria-label="Device pages">
+              <button className="btn" disabled={page <= 1 || refreshing} onClick={() => updateParams({ page: String(page - 1) }, false)}>← Previous</button>
+              <span>Page {page} of {Math.ceil(total / pageSize)}</span>
+              <button className="btn" disabled={page >= Math.ceil(total / pageSize) || refreshing} onClick={() => updateParams({ page: String(page + 1) }, false)}>Next →</button>
+            </nav>
           )}
         </>
       )}
@@ -458,11 +518,17 @@ function DeviceCard({
       role="button"
       tabIndex={0}
       onClick={act}
-      onKeyDown={(e) => e.key === 'Enter' && act()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          act();
+        }
+      }}
     >
       <div className="h">
         <SelectBox selected={selected} onToggle={onToggle} />
-        <span className={`dot ${online ? 'on' : 'off'}`} />
+        <span className={`dot ${online ? 'on' : 'off'}`} aria-hidden="true" />
+        <span className="sr-only">{online ? 'Online' : 'Offline'}</span>
         <span className="nm">{deviceDisplayName(d)}</span>
         {dup > 1 && <DupBadge n={dup} />}
         <DeviceGlyph className="ico" name={d.description || d.number} size={16} />
@@ -513,11 +579,17 @@ function DeviceRow({
       role="button"
       tabIndex={0}
       onClick={act}
-      onKeyDown={(e) => e.key === 'Enter' && act()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          act();
+        }
+      }}
     >
       <div className="id">
         <SelectBox selected={selected} onToggle={onToggle} />
-        <span className={`dot ${online ? 'on' : 'off'}`} />
+        <span className={`dot ${online ? 'on' : 'off'}`} aria-hidden="true" />
+        <span className="sr-only">{online ? 'Online' : 'Offline'}</span>
         <DeviceGlyph className="ico" name={d.description || d.number} size={15} />
         <div style={{ minWidth: 0 }}>
           <div className="nm">{deviceDisplayName(d)}</div>

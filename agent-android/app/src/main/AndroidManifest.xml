@@ -144,6 +144,15 @@
                 android:value="Device Owner MDM agent: maintains the management command channel (check-in + push socket) so the organization can administer this dedicated device." />
         </service>
 
+        <service
+            android:name=".web.WebFilterService"
+            android:exported="false"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:foregroundServiceType="specialUse">
+            <intent-filter><action android:name="android.net.VpnService" /></intent-filter>
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Device Owner domain access enforcement" />
+        </service>
+
         <!-- PackageInstaller commit results land here (explicit, non-exported). -->
         <receiver
             android:name=".install.InstallResultReceiver"

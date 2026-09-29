@@ -10,6 +10,7 @@ import com.hmdm.rest.json.agent.DesiredKiosk;
 import com.hmdm.rest.json.agent.DesiredKioskFeatures;
 import com.hmdm.rest.json.agent.DesiredKioskTheme;
 import com.hmdm.rest.json.agent.DesiredLocation;
+import com.hmdm.rest.json.agent.DesiredWebAccess;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -36,6 +37,7 @@ public final class DesiredConfigBuilder {
     public static final String CAPABILITY = "device.configApply";
     public static final String APP_ALLOWLIST_CAPABILITY = "app.appAllowlist";
     public static final String APP_USAGE_CAPABILITY = "app.usageLimit";
+    public static final String WEB_ACCESS_CAPABILITY = "device.webFilter";
     public static final String POLICY_PREFIX = "policies.";
     public static final String KEY_KIOSK = "kiosk";
     public static final String KEY_LOCATION = "location";
@@ -54,8 +56,26 @@ public final class DesiredConfigBuilder {
         DesiredLocation loc = new DesiredLocation();
         loc.setMode(cfg.getRequestUpdates() == RequestUpdatesType.GPS ? "active" : "passive");
         d.setLocation(loc);
+        d.setWebAccess(webAccess(cfg));
         d.setRevision(revision(d));
         return d;
+    }
+
+    private static DesiredWebAccess webAccess(Configuration cfg) {
+        String mode = cfg.getWebAccessMode() == null ? "OFF" : cfg.getWebAccessMode().trim().toUpperCase();
+        if ("OFF".equals(mode)) return null;
+        if (!"ALLOWLIST".equals(mode) && !"BLOCKLIST".equals(mode)) return null;
+        DesiredWebAccess value = new DesiredWebAccess();
+        value.setMode(mode);
+        Set<String> domains = new TreeSet<String>();
+        if (cfg.getWebAccessDomains() != null) {
+            for (String raw : cfg.getWebAccessDomains().split("[,\\s]+")) {
+                String domain = raw.trim().toLowerCase().replaceFirst("^\\*\\.", "");
+                if (domain.matches("^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$")) domains.add(domain);
+            }
+        }
+        value.setDomains(new ArrayList<String>(domains));
+        return value;
     }
 
     private static DesiredApplications applications(Configuration cfg, List<Application> apps) {
@@ -176,6 +196,7 @@ public final class DesiredConfigBuilder {
     }
 
     public static String requiredCapability(DesiredConfig doc) {
+        if (doc != null && doc.getWebAccess() != null) return WEB_ACCESS_CAPABILITY;
         if (doc != null && doc.getAppUsage() != null) return APP_USAGE_CAPABILITY;
         return doc != null && doc.getApplications() != null && doc.getApplications().isEnforceAllowlist()
                 ? APP_ALLOWLIST_CAPABILITY : CAPABILITY;

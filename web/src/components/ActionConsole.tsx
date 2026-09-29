@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ACTION_TEMPLATES, type CommandTemplateExt, queueCommand, getDeviceState,
+  ACTION_TEMPLATES, type CommandTemplateExt, queueCommand,
   listCommandHistory, forceSync, type DeviceState, type CommandHistoryItem,
 } from '../api/commands';
 import { useToast } from '../ui/toast';
@@ -15,36 +15,65 @@ const GROUPS: Array<{ id: 'safe' | 'disruptive' | 'destructive'; title: string }
   { id: 'destructive', title: 'Destructive' },
 ];
 
-export function ActionConsole({ device }: { device: Device }) {
+export function ActionConsole({
+  device,
+  state,
+  capabilities,
+  onStateRefresh,
+}: {
+  device: Device;
+  state: DeviceState | null;
+  capabilities: Set<string> | null;
+  onStateRefresh?: () => void;
+}) {
   const toast = useToast();
-  const [state, setState] = useState<DeviceState | null>(null);
   const [history, setHistory] = useState<CommandHistoryItem[]>([]);
   const [active, setActive] = useState<CommandTemplateExt | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [confirmText, setConfirmText] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busyKeys, setBusyKeys] = useState<Set<string>>(() => new Set());
   const [kioskOpen, setKioskOpen] = useState(false);
 
-  const refresh = useCallback(async () => {
-    const [st, hist] = await Promise.all([
-      getDeviceState(device.number).catch(() => null),
-      listCommandHistory(device.number).catch(() => []),
-    ]);
-    setState(st);
+  const refresh = useCallback(async (signal?: AbortSignal): Promise<CommandHistoryItem[]> => {
+    const hist = await listCommandHistory(device.number, 0, signal).catch(() => []);
+    if (signal?.aborted) return [];
     setHistory(hist);
+    return hist;
   }, [device.number]);
 
   useEffect(() => {
     let on = true;
     let t: ReturnType<typeof setTimeout>;
+    let request: AbortController | null = null;
     // Light UI poll of server-side state — self-scheduling so slow responses can't overlap.
     const loop = async () => {
-      await refresh();
+      if (document.hidden) {
+        request?.abort();
+        t = setTimeout(() => void loop(), 30000);
+        return;
+      }
+      request?.abort();
+      request = new AbortController();
+      const items = await refresh(request.signal);
       if (!on) return;
-      t = setTimeout(() => void loop(), 5000);
+      const hasActiveCommand = items.some((item) =>
+        item.status === 'pending' || item.status === 'delivered' || item.status === 'accepted');
+      t = setTimeout(() => void loop(), hasActiveCommand ? 5000 : 30000);
     };
+    const resume = () => {
+      if (!document.hidden) {
+        clearTimeout(t);
+        void loop();
+      }
+    };
+    document.addEventListener('visibilitychange', resume);
     void loop();
-    return () => { on = false; clearTimeout(t); };
+    return () => {
+      on = false;
+      clearTimeout(t);
+      request?.abort();
+      document.removeEventListener('visibilitychange', resume);
+    };
   }, [refresh]);
 
   function start(t: CommandTemplateExt) {
@@ -54,7 +83,7 @@ export function ActionConsole({ device }: { device: Device }) {
   }
 
   async function send(t: CommandTemplateExt, values: Record<string, string>) {
-    setBusy(true);
+    setBusyKeys((keys) => new Set(keys).add(t.key));
     try {
       const req = t.build ? t.build(values) : t.request;
       const res = await queueCommand(device.number, req);
@@ -62,10 +91,15 @@ export function ActionConsole({ device }: { device: Device }) {
       toast.push('ok', `${t.label} queued`, id ? `Command ${id}` : '');
       await forceSync(device.number).catch(() => undefined); // nudge (no-op until MQTT lands)
       await refresh();
+      onStateRefresh?.();
     } catch (e) {
       toast.push('err', `${t.label} failed`, e instanceof Error ? e.message : '');
     } finally {
-      setBusy(false);
+      setBusyKeys((keys) => {
+        const next = new Set(keys);
+        next.delete(t.key);
+        return next;
+      });
     }
   }
 
@@ -97,8 +131,18 @@ export function ActionConsole({ device }: { device: Device }) {
         <h2 className="panel-title">Device control</h2>
         <button
           className="btn"
-          disabled={busy}
-          onClick={() => { void forceSync(device.number).then(refresh).catch(() => undefined); }}
+          disabled={busyKeys.has('sync')}
+          onClick={() => {
+            setBusyKeys((keys) => new Set(keys).add('sync'));
+            void forceSync(device.number)
+              .then(() => { onStateRefresh?.(); return refresh(); })
+              .catch(() => undefined)
+              .finally(() => setBusyKeys((keys) => {
+                const next = new Set(keys);
+                next.delete('sync');
+                return next;
+              }));
+          }}
         >
           Sync now
         </button>
@@ -110,17 +154,24 @@ export function ActionConsole({ device }: { device: Device }) {
         <section key={g.id} className="action-group">
           <h3 className="action-group-title">{g.title}</h3>
           <div className="action-grid">
-            {ACTION_TEMPLATES.filter((t) => (t.group ?? 'safe') === g.id).map((t) => (
-              <button
-                key={t.key}
-                className={`btn ${t.danger ? 'btn-danger' : ''}`}
-                disabled={busy}
-                title={t.description}
-                onClick={() => { void onClick(t); }}
-              >
-                {t.label}
-              </button>
-            ))}
+            {ACTION_TEMPLATES.filter((t) => (t.group ?? 'safe') === g.id).map((t) => {
+              const required = t.request.requiresCapability;
+              const unsupported = capabilities != null && !!required && !capabilities.has(required);
+              return (
+                <button
+                  key={t.key}
+                  className={`btn ${t.danger ? 'btn-danger' : ''} ${unsupported ? 'is-unsupported' : ''}`}
+                  disabled={busyKeys.has(t.key)}
+                  aria-disabled={unsupported}
+                  title={unsupported ? `Not supported by this device (${required}).` : t.description}
+                  aria-describedby={unsupported ? `capability-${t.key}` : undefined}
+                  onClick={() => { if (!unsupported) void onClick(t); }}
+                >
+                  {t.label}
+                  {unsupported && <span id={`capability-${t.key}`} className="sr-only">Not supported by this device.</span>}
+                </button>
+              );
+            })}
           </div>
         </section>
       ))}
@@ -136,7 +187,7 @@ export function ActionConsole({ device }: { device: Device }) {
       )}
 
       {active && (
-        <Modal onClose={busy ? undefined : () => setActive(null)} ariaLabel={active.label}>
+        <Modal onClose={busyKeys.has(active.key) ? undefined : () => setActive(null)} ariaLabel={active.label}>
             <h3>{active.label}</h3>
             <p className="muted">{active.description}</p>
             {active.params?.map((p) => (
@@ -157,10 +208,10 @@ export function ActionConsole({ device }: { device: Device }) {
               </label>
             )}
             <div className="modal-actions">
-              <button className="btn" disabled={busy} onClick={() => setActive(null)}>Cancel</button>
+              <button className="btn" disabled={busyKeys.has(active.key)} onClick={() => setActive(null)}>Cancel</button>
               <button
                 className={`btn ${active.danger ? 'btn-danger' : 'btn-primary'}`}
-                disabled={busy || !canSend}
+                disabled={busyKeys.has(active.key) || !canSend}
                 onClick={() => { void confirmAndSend(); }}
               >
                 {active.danger ? 'Confirm' : 'Send'}

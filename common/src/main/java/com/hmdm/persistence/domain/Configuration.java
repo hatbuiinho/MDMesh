@@ -144,6 +144,10 @@ public class Configuration implements CustomerData, Serializable {
     private boolean appAllowlist;
     @ApiModelProperty("Additional package IDs allowed by the app allowlist, separated by commas or whitespace")
     private String appAllowlistPackages;
+    @ApiModelProperty("Web access policy: OFF, ALLOWLIST, or BLOCKLIST")
+    private String webAccessMode = "OFF";
+    @ApiModelProperty("Allowed or blocked domain names, separated by commas or whitespace")
+    private String webAccessDomains;
     @ApiModelProperty("A package ID for content application")
     private Integer contentAppId;
     @ApiModelProperty("WiFi SSID for provisioning")
@@ -431,6 +435,11 @@ public class Configuration implements CustomerData, Serializable {
     public void setAppAllowlistPackages(String appAllowlistPackages) {
         this.appAllowlistPackages = appAllowlistPackages;
     }
+
+    public String getWebAccessMode() { return webAccessMode; }
+    public void setWebAccessMode(String webAccessMode) { this.webAccessMode = webAccessMode; }
+    public String getWebAccessDomains() { return webAccessDomains; }
+    public void setWebAccessDomains(String webAccessDomains) { this.webAccessDomains = webAccessDomains; }
 
     public String getQrCodeKey() {
         return qrCodeKey;

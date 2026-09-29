@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { getLatestScan, scanApps, type AppInfo } from '../api/deviceApps';
 import { forceSync, queueCommand } from '../api/commands';
 import { useToast } from '../ui/toast';
@@ -17,28 +17,18 @@ export function DeviceAppsTab({ device }: { device: { number: string; descriptio
   const [selected, setSelected] = useState<AppInfo | null>(null);
   const [busy, setBusy] = useState(false);
   const [queuedPackages, setQueuedPackages] = useState<Set<string>>(new Set());
+  const [visibleLimit, setVisibleLimit] = useState(150);
 
   useEffect(() => {
     const ac = new AbortController();
     abortRef.current = ac;
-    setScanning(true);
+    setError(null);
     void (async () => {
       const saved = await getLatestScan(device.number).catch(() => null);
       if (ac.signal.aborted) return;
       if (saved) {
         setApps(saved.apps);
         setScannedAt(saved.scannedAt ?? null);
-      }
-      try {
-        const fresh = await scanApps(device.number, ac.signal);
-        if (ac.signal.aborted) return;
-        setApps(fresh);
-        setScannedAt(Date.now());
-        setSelected(null);
-      } catch (e) {
-        if (!ac.signal.aborted) setError(e instanceof Error ? e.message : 'Scan failed');
-      } finally {
-        if (!ac.signal.aborted) setScanning(false);
       }
     })();
     return () => ac.abort();
@@ -61,13 +51,14 @@ export function DeviceAppsTab({ device }: { device: { number: string; descriptio
     }
   }
 
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return (apps ?? [])
-      .filter((app) => app.pkg && (showSystem || !app.system))
-      .filter((app) => !q || app.label.toLowerCase().includes(q) || app.pkg.toLowerCase().includes(q))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [apps, query, showSystem]);
+  const deferredQuery = useDeferredValue(query.trim().toLowerCase());
+  const sorted = useMemo(() => [...(apps ?? [])].filter((app) => app.pkg)
+    .sort((a, b) => (a.label || a.pkg).localeCompare(b.label || b.pkg)), [apps]);
+  const visible = useMemo(() => sorted
+    .filter((app) => showSystem || !app.system)
+    .filter((app) => !deferredQuery || app.label?.toLowerCase().includes(deferredQuery) || app.pkg.toLowerCase().includes(deferredQuery)),
+  [sorted, deferredQuery, showSystem]);
+  useEffect(() => setVisibleLimit(150), [deferredQuery, showSystem, apps]);
 
   async function uninstall() {
     if (!selected) return;
@@ -99,14 +90,15 @@ export function DeviceAppsTab({ device }: { device: { number: string; descriptio
             <input type="checkbox" checked={showSystem} onChange={(e) => setShowSystem(e.target.checked)} /> Show system apps
           </label>
           <button className="btn" disabled={scanning || busy} onClick={() => { void rescan(); }}>
-            {scanning ? 'Scanning…' : 'Re-scan'}
+            {scanning ? 'Refreshing…' : apps ? 'Refresh apps' : 'Scan installed apps'}
           </button>
         </div>
         {scannedAt && <p className="muted">Scan from {new Date(scannedAt).toLocaleString()}{scanning ? ' · refreshing…' : ''} · {apps?.length ?? 0} apps</p>}
         {error && <p className="err-text">{error}</p>}
-        {!apps && scanning && <p className="muted">Asking the device for installed apps…</p>}
+        {!apps && scanning && <p className="muted">Asking the device for installed apps… You can leave this tab while it completes.</p>}
+        {!apps && !scanning && !error && <div className="empty">No app snapshot yet. Scan the device when it is online.</div>}
         <div className="kiosk-applist">
-          {visible.map((app) => (
+          {visible.slice(0, visibleLimit).map((app) => (
             <div key={app.pkg} className="kiosk-app" title={app.pkg}>
               <span className="kiosk-ico ph">{(app.label || app.pkg).slice(0, 1).toUpperCase()}</span>
               <span className="kiosk-app-meta">
@@ -116,11 +108,14 @@ export function DeviceAppsTab({ device }: { device: { number: string; descriptio
               <span className="kiosk-badges">
                 {app.system && <span className="kiosk-badge sys">system</span>}
                 {queuedPackages.has(app.pkg) && <span className="kiosk-badge">Queued</span>}
-                <button className="btn btn-sm btn-danger" disabled={busy || scanning || queuedPackages.has(app.pkg)}
+                <button className="btn btn-sm btn-danger" disabled={busy || queuedPackages.has(app.pkg)}
                   onClick={() => setSelected(app)}>Uninstall</button>
               </span>
             </div>
           ))}
+          {visible.length > visibleLimit && <button className="device-apps-more" onClick={() => setVisibleLimit((n) => n + 150)}>
+            Show {Math.min(150, visible.length - visibleLimit)} more apps
+          </button>}
           {apps && !visible.length && <p className="muted" style={{ padding: 10 }}>No apps match.</p>}
         </div>
         {selected && <Modal onClose={busy ? undefined : () => setSelected(null)} ariaLabel="Confirm uninstall">

@@ -313,6 +313,20 @@ public class AgentAdminResource {
     }
 
     // =================================================================================================================
+    @ApiOperation(value = "Device capabilities", notes = "Flattened capability tokens advertised by the agent.")
+    @GET
+    @Path("/devices/{deviceId}/capabilities")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getCapabilities(@PathParam("deviceId") String deviceId) {
+        Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
+        if (!customerId.isPresent()) return Response.PERMISSION_DENIED();
+        Device device = unsecureDAO.getDeviceByNumber(deviceId);
+        if (device == null) return Response.ERROR("error.agent.device.unknown");
+        if (device.getCustomerId() != customerId.get()) return Response.PERMISSION_DENIED();
+        return Response.OK(AgentCapabilityTokens.flatten(commandDAO.getDeviceCapabilities(deviceId)));
+    }
+
+    // =================================================================================================================
     @ApiOperation(value = "Device configuration status", notes = "Desired-state revision vs the revision the agent last applied.")
     @GET
     @Path("/devices/{deviceId}/configStatus")
@@ -425,6 +439,7 @@ public class AgentAdminResource {
     @Produces(MediaType.APPLICATION_JSON)
     public Response listEvents(@PathParam("deviceId") String deviceId,
                                @QueryParam("since") Long since,
+                               @QueryParam("before") Long before,
                                @QueryParam("limit") Integer limit) {
         Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
         if (!customerId.isPresent()) {
@@ -438,8 +453,9 @@ public class AgentAdminResource {
             return Response.PERMISSION_DENIED();
         }
         long sinceMillis = since == null ? 0L : since;
+        long beforeMillis = before == null ? Long.MAX_VALUE : before;
         int cap = limit == null ? 200 : Math.min(limit, 500);
-        return Response.OK(commandDAO.listEvents(deviceId, sinceMillis, cap));
+        return Response.OK(commandDAO.listEvents(deviceId, sinceMillis, beforeMillis, cap));
     }
 
     // =================================================================================================================
@@ -466,12 +482,45 @@ public class AgentAdminResource {
     }
 
     // =================================================================================================================
+    @ApiOperation(value = "Get one command", notes = "Lightweight polling endpoint for asynchronous device actions.")
+    @GET
+    @Path("/devices/{deviceId}/commands/{commandId}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getCommand(@PathParam("deviceId") String deviceId,
+                               @PathParam("commandId") Integer commandId) {
+        Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
+        if (!customerId.isPresent()) return Response.PERMISSION_DENIED();
+        Device device = unsecureDAO.getDeviceByNumber(deviceId);
+        if (device == null) return Response.ERROR("error.agent.device.unknown");
+        if (device.getCustomerId() != customerId.get()) return Response.PERMISSION_DENIED();
+        AgentCommand command = commandDAO.findByDeviceAndId(deviceId, commandId);
+        return command == null ? Response.ERROR("error.agent.command.unknown") : Response.OK(CommandHistoryView.from(command));
+    }
+
+    // =================================================================================================================
+    @ApiOperation(value = "Latest installed-app snapshot", notes = "Returns only the latest completed apps.scan command.")
+    @GET
+    @Path("/devices/{deviceId}/apps/latest")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getLatestApps(@PathParam("deviceId") String deviceId) {
+        Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
+        if (!customerId.isPresent()) return Response.PERMISSION_DENIED();
+        Device device = unsecureDAO.getDeviceByNumber(deviceId);
+        if (device == null) return Response.ERROR("error.agent.device.unknown");
+        if (device.getCustomerId() != customerId.get()) return Response.PERMISSION_DENIED();
+        AgentCommand latest = commandDAO.findLatestCompletedOfType(deviceId, "apps.scan");
+        return Response.OK(latest == null ? null : CommandHistoryView.from(latest));
+    }
+
+    // =================================================================================================================
     @ApiOperation(value = "Location history", notes = "Recent location breadcrumb trail for a device, newest first.")
     @GET
     @Path("/devices/{deviceId}/locations")
     @Produces(MediaType.APPLICATION_JSON)
     public Response listLocations(@PathParam("deviceId") String deviceId,
-                                  @QueryParam("since") Long since) {
+                                  @QueryParam("since") Long since,
+                                  @QueryParam("before") Long before,
+                                  @QueryParam("limit") Integer limit) {
         Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
         if (!customerId.isPresent()) {
             return Response.PERMISSION_DENIED();
@@ -484,7 +533,9 @@ public class AgentAdminResource {
             return Response.PERMISSION_DENIED();
         }
         long sinceMillis = since == null ? 0L : since;
-        return Response.OK(commandDAO.listLocations(deviceId, sinceMillis, 500));
+        long beforeMillis = before == null ? Long.MAX_VALUE : before;
+        int cap = limit == null ? 100 : Math.min(limit, 500);
+        return Response.OK(commandDAO.listLocations(deviceId, sinceMillis, beforeMillis, cap));
     }
 
     // =================================================================================================================

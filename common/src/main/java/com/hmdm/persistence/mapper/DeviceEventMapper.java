@@ -15,7 +15,9 @@ public interface DeviceEventMapper {
     void insert(DeviceEvent event);
 
     @Select({"SELECT id, deviceNumber, type, ts, detail FROM device_event " +
-            "WHERE deviceNumber = #{deviceNumber} AND ts >= #{since} ORDER BY ts DESC, id DESC LIMIT #{limit}"})
+            "WHERE deviceNumber = #{deviceNumber} AND ts >= #{since} AND ts < #{before} " +
+            "ORDER BY ts DESC, id DESC LIMIT #{limit}"})
     List<DeviceEvent> list(@Param("deviceNumber") String deviceNumber,
-                           @Param("since") long since, @Param("limit") int limit);
+                           @Param("since") long since, @Param("before") long before,
+                           @Param("limit") int limit);
 }

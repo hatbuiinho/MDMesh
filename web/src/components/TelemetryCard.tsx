@@ -1,7 +1,15 @@
-import { useEffect, useState } from 'react';
-import { getTelemetry, type TelemetrySnapshot } from '../api/telemetry';
+import type { TelemetrySnapshot } from '../api/telemetry';
 
-type Device = { number: string };
+function fieldLabel(value: string): string {
+  const spaced = value.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+function fieldValue(value: unknown): string {
+  if (value == null || value === '') return '—';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  return Array.isArray(value) ? value.join(', ') : String(value);
+}
 
 function Group({ title, data }: { title: string; data?: Record<string, unknown> }) {
   if (!data || Object.keys(data).length === 0) return null;
@@ -11,8 +19,8 @@ function Group({ title, data }: { title: string; data?: Record<string, unknown> 
       <dl className="state-grid">
         {Object.entries(data).map(([k, v]) => (
           <div key={k}>
-            <dt>{k}</dt>
-            <dd>{Array.isArray(v) ? v.join(', ') : v === null ? '—' : String(v)}</dd>
+            <dt>{fieldLabel(k)}</dt>
+            <dd>{fieldValue(v)}</dd>
           </div>
         ))}
       </dl>
@@ -20,24 +28,8 @@ function Group({ title, data }: { title: string; data?: Record<string, unknown> 
   );
 }
 
-export function TelemetryCard({ device }: { device: Device }) {
-  const [t, setT] = useState<TelemetrySnapshot | null>(null);
-  useEffect(() => {
-    let on = true;
-    let id: ReturnType<typeof setTimeout>;
-    // Self-scheduling poll — the next tick is armed only after the current one finishes.
-    const load = async () => {
-      await getTelemetry(device.number)
-        .then((v) => { if (on) setT(v); })
-        .catch(() => { if (on) setT(null); });
-      if (!on) return;
-      id = setTimeout(() => void load(), 5000);
-    };
-    void load();
-    return () => { on = false; clearTimeout(id); };
-  }, [device.number]);
-
-  if (!t) {
+export function TelemetryCard({ telemetry }: { telemetry: TelemetrySnapshot | null }) {
+  if (!telemetry) {
     return (
       <div className="panel">
         <h2 className="panel-title">Telemetry</h2>
@@ -48,10 +40,10 @@ export function TelemetryCard({ device }: { device: Device }) {
   return (
     <div className="panel">
       <h2 className="panel-title">Telemetry</h2>
-      <Group title="Hardware" data={t.hardware} />
-      <Group title="Network & Battery" data={t.dynamic} />
-      <Group title="Security" data={t.security} />
-      <Group title="Identity" data={t.identity} />
+      <Group title="Hardware" data={telemetry.hardware} />
+      <Group title="Network & Battery" data={telemetry.dynamic} />
+      <Group title="Security" data={telemetry.security} />
+      <Group title="Identity" data={telemetry.identity} />
     </div>
   );
 }

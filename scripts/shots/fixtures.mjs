@@ -32,7 +32,8 @@ export function buildFixtures(now = Date.now()) {
 
   function d(id, number, configurationId, description, statusCode, lastUpdate, androidVersion, kioskMode, groupNames) {
     return {
-      id, number, configurationId, description, statusCode, lastUpdate, androidVersion, kioskMode,
+      id, number, configurationId, configurationName: configurations[configurationId]?.name,
+      description, statusCode, lastUpdate, androidVersion, kioskMode,
       enrollTime: now - 40 * day, mdmMode: true, launcherVersion: '0.1.15',
       groups: groupNames.map((n, i) => ({ id: i + 1, name: n })),
     };
@@ -56,6 +57,11 @@ export function buildFixtures(now = Date.now()) {
     androidRelease: '13', lastBootAt: now - 3 * hour, updatedAt: now - 30 * 1000,
     agentVersion: '0.1.15', powerMode: 'adaptive',
   };
+  const capabilities = [
+    'device.lockscreenMessage', 'device.alert', 'device.ring', 'device.ringStop',
+    'device.lock', 'device.reboot', 'device.passcodeReset', 'device.wipe',
+    'device.powerMode', 'device.locationMode', 'app.silentInstall',
+  ];
 
   const telemetry = {
     dynamic: {
@@ -104,5 +110,5 @@ export function buildFixtures(now = Date.now()) {
 
   const authOptions = { signup: false, recover: false };
 
-  return { user, configurations, configList, devices, events, state, telemetry, locations, applications, updateStatus, activeRollout, authOptions };
+  return { user, configurations, configList, devices, events, state, capabilities, telemetry, locations, applications, updateStatus, activeRollout, authOptions };
 }

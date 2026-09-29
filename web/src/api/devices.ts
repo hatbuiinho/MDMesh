@@ -11,6 +11,9 @@ export interface DeviceSearchRequest {
   value?: string;
   groupId?: number;
   configurationId?: number;
+  androidVersion?: string;
+  onlineEarlierMillis?: number;
+  onlineLaterMillis?: number;
   pageSize?: number;
   /** 1-based. */
   pageNum?: number;
@@ -26,6 +29,7 @@ export interface DeviceView {
   id: number;
   number: string;
   configurationId?: number;
+  configurationName?: string;
   description?: string;
   /** Last sync time, ms since epoch. */
   lastUpdate?: number;
@@ -92,6 +96,7 @@ export async function updateDeviceDescription(
 
 export async function searchDevices(
   req: DeviceSearchRequest = {},
+  signal?: AbortSignal,
 ): Promise<DeviceListView> {
   // NOTE: do NOT default sortBy — the server's DeviceListSortBy enum only accepts values
   // like NUMBER / ANDROID_VERSION / STATUS / CUSTOM1.. (not "description"); an unknown value
@@ -103,5 +108,11 @@ export async function searchDevices(
     pageSize: 50,
     ...req,
   };
-  return apiClient.post<DeviceListView>('/private/devices/search', body);
+  return apiClient.post<DeviceListView>('/private/devices/search', body, signal);
+}
+
+/** Lightweight exact lookup used by Device Detail. Unlike /search, this does not
+ * build configuration application/file collections or fetch a fleet-sized page. */
+export function getDeviceByNumber(number: string, signal?: AbortSignal): Promise<DeviceView> {
+  return apiClient.get<DeviceView>(`/private/devices/number/${encodeURIComponent(number)}`, signal);
 }

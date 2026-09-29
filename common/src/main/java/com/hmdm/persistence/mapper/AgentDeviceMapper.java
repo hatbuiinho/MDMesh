@@ -80,10 +80,12 @@ public interface AgentDeviceMapper {
             "WHERE deviceNumber = #{deviceNumber} AND capturedAt >= #{capturedAt})"})
     void insertLocation(DeviceLocation location);
 
-    @Select({"SELECT * FROM device_location WHERE deviceNumber = #{deviceNumber} AND capturedAt >= #{since} " +
+    @Select({"SELECT * FROM device_location WHERE deviceNumber = #{deviceNumber} " +
+            "AND capturedAt >= #{since} AND capturedAt < #{before} " +
             "ORDER BY capturedAt DESC LIMIT #{limit}"})
     List<DeviceLocation> listLocations(@Param("deviceNumber") String deviceNumber,
-                                       @Param("since") long since, @Param("limit") int limit);
+                                       @Param("since") long since, @Param("before") long before,
+                                       @Param("limit") int limit);
 
     @Select({"SELECT number FROM devices WHERE configurationId = #{configurationId} " +
             "AND agentSecretHash IS NOT NULL"})

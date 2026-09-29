@@ -95,6 +95,11 @@ public class DeviceView {
         return device.getConfigurationId();
     }
 
+    @ApiModelProperty("Name of the configuration assigned to the device")
+    public String getConfigurationName() {
+        return device.getConfigName();
+    }
+
     @ApiModelProperty("An unique textual identifier of device")
     public String getNumber() {
         return device.getNumber();

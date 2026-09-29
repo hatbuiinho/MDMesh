@@ -17,8 +17,8 @@ export interface ConfigSyncSummary {
 /** Shape of `lastCommand.detail` for config.apply (proto/payloads/config-apply-result.schema.json). */
 export interface ConfigOutcomes { revision?: string; outcomes: Record<string, string> }
 
-export function getConfigStatus(deviceId: number | string): Promise<ConfigStatus | null> {
-  return apiClient.get<ConfigStatus | null>(`/private/agent/v1/devices/${deviceId}/configStatus`);
+export function getConfigStatus(deviceId: number | string, signal?: AbortSignal): Promise<ConfigStatus | null> {
+  return apiClient.get<ConfigStatus | null>(`/private/agent/v1/devices/${deviceId}/configStatus`, signal);
 }
 
 export function getSyncSummary(): Promise<ConfigSyncSummary[]> {

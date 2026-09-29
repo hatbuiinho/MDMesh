@@ -114,6 +114,8 @@ public interface ConfigurationMapper {
             "kioskMode=#{kioskMode}, " +
             "appAllowlist=#{appAllowlist}, " +
             "appAllowlistPackages=#{appAllowlistPackages}, " +
+            "webAccessMode=#{webAccessMode}, " +
+            "webAccessDomains=#{webAccessDomains}, " +
             "wifiSSID=#{wifiSSID}, " +
             "wifiPassword=#{wifiPassword}, " +
             "wifiSecurityType=#{wifiSecurityType}, " +

@@ -58,6 +58,8 @@ import com.mdmesh.core.telemetry.TelemetryAssembler
 import com.mdmesh.core.telemetry.TelemetrySource
 import com.mdmesh.core.usage.AppUsageManager
 import com.mdmesh.core.usage.AndroidAppUsageManager
+import com.mdmesh.core.web.WebAccessManager
+import com.mdmesh.agent.web.AndroidWebAccessManager
 import com.mdmesh.proto.AppManagement
 import com.mdmesh.proto.DeviceAction
 import com.mdmesh.kiosk.CrashLoopGuard
@@ -356,6 +358,11 @@ object AgentModule {
 
     @Provides
     @Singleton
+    fun provideWebAccessManager(@ApplicationContext context: Context, handle: DpmHandle): WebAccessManager =
+        AndroidWebAccessManager(context, handle.dpm, handle.admin)
+
+    @Provides
+    @Singleton
     fun provideConfigApplier(
         toggles: Map<String, @JvmSuppressWildcards TogglePolicy>,
         kiosk: KioskApplier,
@@ -363,7 +370,8 @@ object AgentModule {
         store: ConfigStateStore,
         applicationAllowlist: ApplicationAllowlist,
         appUsage: AppUsageManager,
-    ): ConfigApplier = ConfigApplier(toggles, kiosk, location::set, store, applicationAllowlist, appUsage)
+        webAccess: WebAccessManager,
+    ): ConfigApplier = ConfigApplier(toggles, kiosk, location::set, store, applicationAllowlist, appUsage, webAccess)
 
     @Provides
     @IntoSet

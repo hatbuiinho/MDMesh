@@ -84,6 +84,10 @@ export const CONFIG_FIELDS: FieldDef[] = [
     { value: 'NONE', label: 'Open' }, { value: 'WPA', label: 'WPA/WPA2' }, { value: 'WEP', label: 'WEP' }, { value: 'EAP', label: 'Enterprise (EAP)' },
   ] },
   { key: 'mobileEnrollment', label: 'Enroll over mobile data', type: 'switch', group: 'Network', help: 'Prefer mobile data over Wi-Fi during provisioning.' },
+  { key: 'webAccessMode', label: 'Web access', type: 'enum', group: 'Network', focused: true, enforced: true, help: 'Filter domains locally on the device. Allowlist is recommended for dedicated devices.', options: [
+    { value: 'OFF', label: 'Not managed' }, { value: 'ALLOWLIST', label: 'Only listed domains' }, { value: 'BLOCKLIST', label: 'Block listed domains' },
+  ] },
+  { key: 'webAccessDomains', label: 'Web domains', type: 'textarea', group: 'Network', focused: true, enforced: true, help: 'One domain per line. A domain also matches its subdomains; do not include https:// or paths.' },
 
   // ── Security ───────────────────────────────────────────────────────────-─
   { key: 'password', label: 'Admin password', type: 'password', group: 'Security', enforced: true, help: 'Kiosk exit password (stored as entered).' },
@@ -160,4 +164,5 @@ export const KIOSK_AFFECTING_KEYS: ReadonlySet<string> = new Set([
   'kioskMode', 'mainAppId', 'kioskExit', 'kioskHome', 'kioskRecents', 'kioskNotifications', 'kioskSystemInfo',
   'kioskKeyguard', 'kioskLockButtons', 'password', 'backgroundColor', 'textColor', 'iconSize',
   'applications', 'appAllowlist', 'appAllowlistPackages',
+  'webAccessMode', 'webAccessDomains',
 ]);

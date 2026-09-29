@@ -45,9 +45,14 @@ function restData(method, p) {
   if (p === '/public/auth/options') return fx.authOptions;
   if (p === '/public/auth/login') return fx.user;
   if (p.endsWith('/devices/search')) return deviceListView;
+  if (/\/devices\/number\/[^/]+$/.test(p)) {
+    const number = decodeURIComponent(p.split('/').pop());
+    return fx.devices.find((d) => d.number === number || String(d.id) === number) || null;
+  }
   if (p.endsWith('/configurations/search')) return fx.configList;
   if (p.endsWith('/applications/search') || /\/applications\/search\//.test(p)) return fx.applications;
   if (/\/devices\/[^/]+\/state$/.test(p)) return fx.state;
+  if (/\/devices\/[^/]+\/capabilities$/.test(p)) return fx.capabilities;
   if (/\/devices\/[^/]+\/telemetry$/.test(p)) return fx.telemetry;
   if (/\/devices\/[^/]+\/events/.test(p)) return fx.events;
   if (/\/devices\/[^/]+\/locations/.test(p)) return fx.locations;

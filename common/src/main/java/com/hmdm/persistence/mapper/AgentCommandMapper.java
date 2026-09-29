@@ -137,4 +137,8 @@ public interface AgentCommandMapper {
 
     @Select({"SELECT * FROM agentCommand WHERE deviceNumber = #{deviceNumber} AND type = #{type} ORDER BY id DESC LIMIT 1"})
     AgentCommand findLatestOfType(@Param("deviceNumber") String deviceNumber, @Param("type") String type);
+
+    @Select({"SELECT * FROM agentCommand WHERE deviceNumber = #{deviceNumber} AND type = #{type} " +
+            "AND status = 'done' ORDER BY id DESC LIMIT 1"})
+    AgentCommand findLatestCompletedOfType(@Param("deviceNumber") String deviceNumber, @Param("type") String type);
 }

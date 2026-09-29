@@ -48,4 +48,5 @@ public class DesiredConfig {
     private DesiredApplications applications;
     private DesiredLocation location;
     private DesiredAppUsage appUsage;
+    private DesiredWebAccess webAccess;
 }

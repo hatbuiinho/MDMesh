@@ -124,7 +124,11 @@ public class AgentCommandDAO {
 
     /** Event timeline for a device, newest first, at/after {@code since}. */
     public List<DeviceEvent> listEvents(String deviceNumber, long since, int limit) {
-        return eventMapper.list(deviceNumber, since, limit);
+        return listEvents(deviceNumber, since, Long.MAX_VALUE, limit);
+    }
+
+    public List<DeviceEvent> listEvents(String deviceNumber, long since, long before, int limit) {
+        return eventMapper.list(deviceNumber, since, before, limit);
     }
 
     public AgentCommand findByDeviceAndId(String deviceNumber, Integer commandId) {
@@ -174,7 +178,12 @@ public class AgentCommandDAO {
 
     public java.util.List<com.hmdm.persistence.domain.DeviceLocation> listLocations(
             String deviceNumber, long since, int limit) {
-        return deviceMapper.listLocations(deviceNumber, since, limit);
+        return listLocations(deviceNumber, since, Long.MAX_VALUE, limit);
+    }
+
+    public java.util.List<com.hmdm.persistence.domain.DeviceLocation> listLocations(
+            String deviceNumber, long since, long before, int limit) {
+        return deviceMapper.listLocations(deviceNumber, since, before, limit);
     }
 
     /** True if a pending or delivered command of {@code type} is already queued for the device. */
@@ -199,6 +208,10 @@ public class AgentCommandDAO {
     /** The most recently created command of {@code type} for the device, or null if none exists. */
     public AgentCommand findLatestOfType(String deviceNumber, String type) {
         return mapper.findLatestOfType(deviceNumber, type);
+    }
+
+    public AgentCommand findLatestCompletedOfType(String deviceNumber, String type) {
+        return mapper.findLatestCompletedOfType(deviceNumber, type);
     }
 
     /** Device numbers currently assigned to a configuration. */

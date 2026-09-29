@@ -13,6 +13,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import com.mdmesh.core.usage.AppUsageManager
 import com.mdmesh.core.usage.UnsupportedAppUsageManager
+import com.mdmesh.core.web.WebAccessManager
+import com.mdmesh.core.web.UnsupportedWebAccessManager
 
 /**
  * Converges the device to a desired-state document. Each present section is applied through the code that
@@ -34,6 +36,7 @@ class ConfigApplier(
         com.mdmesh.policy.ApplicationAllowlistResult(false)
     },
     private val appUsage: AppUsageManager = UnsupportedAppUsageManager,
+    private val webAccess: WebAccessManager = UnsupportedWebAccessManager,
 ) {
     private val mutex = Mutex()
 
@@ -59,6 +62,9 @@ class ConfigApplier(
         }
         val usageOutcome = appUsage.apply(doc.appUsage)
         if (doc.appUsage != null) outcomes["appUsage"] = usageOutcome
+        if (doc.webAccess != null || store.load()?.webAccess != null) {
+            outcomes["webAccess"] = webAccess.apply(doc.webAccess)
+        }
         val result = ConfigApplyResult(doc.revision, outcomes)
         if (succeeded(result)) store.save(doc)
         return result

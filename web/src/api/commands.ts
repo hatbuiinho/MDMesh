@@ -171,7 +171,7 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
   },
   {
     key: 'lock', label: 'Lock device', group: 'disruptive', danger: true,
-    description: 'Lock the device screen immediately.',
+    description: 'Lock the device screen immediately.', confirm: 'simple',
     request: { type: 'device.lock', requiresCapability: 'device.lock' },
   },
   {
@@ -235,7 +235,7 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
   },
   {
     key: 'kiosk-exit', label: 'Exit kiosk', group: 'disruptive',
-    description: 'Release kiosk mode and restore the normal home screen.',
+    description: 'Release kiosk mode and restore the normal home screen.', confirm: 'simple',
     request: { type: 'kiosk.exit' },
   },
 ];
@@ -255,8 +255,12 @@ export interface CommandHistoryItem {
   subject?: string | null;
 }
 
-export async function getDeviceState(deviceId: number | string): Promise<DeviceState | null> {
-  return apiClient.get<DeviceState | null>(`/private/agent/v1/devices/${deviceId}/state`);
+export async function getDeviceState(deviceId: number | string, signal?: AbortSignal): Promise<DeviceState | null> {
+  return apiClient.get<DeviceState | null>(`/private/agent/v1/devices/${deviceId}/state`, signal);
+}
+
+export async function getDeviceCapabilities(deviceId: number | string, signal?: AbortSignal): Promise<string[]> {
+  return apiClient.get<string[]>(`/private/agent/v1/devices/${deviceId}/capabilities`, signal);
 }
 
 export async function listCommandHistory(
@@ -264,6 +268,15 @@ export async function listCommandHistory(
 ): Promise<CommandHistoryItem[]> {
   return apiClient.get<CommandHistoryItem[]>(
     `/private/agent/v1/devices/${deviceId}/commands?since=${since}`,
+    signal,
+  );
+}
+
+export async function getCommand(
+  deviceId: number | string, commandId: number | string, signal?: AbortSignal,
+): Promise<CommandHistoryItem> {
+  return apiClient.get<CommandHistoryItem>(
+    `/private/agent/v1/devices/${deviceId}/commands/${commandId}`,
     signal,
   );
 }
