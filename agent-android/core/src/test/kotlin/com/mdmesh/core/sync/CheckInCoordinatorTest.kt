@@ -6,6 +6,11 @@ import com.mdmesh.core.command.CommandResults
 import com.mdmesh.core.net.ResponseEnvelope
 import com.mdmesh.core.usage.AppUsageManager
 import com.mdmesh.core.usage.UnsupportedAppUsageManager
+import com.mdmesh.core.store.InMemoryConfigStateStore
+import com.mdmesh.policy.ApplicationAllowlist
+import com.mdmesh.policy.ApplicationAllowlistResult
+import com.mdmesh.proto.ConfigApplications
+import com.mdmesh.proto.ConfigApplyPayload
 import com.mdmesh.proto.AgentCheckInResponse
 import com.mdmesh.proto.AppUsageDailyReport
 import com.mdmesh.proto.CommandEnvelope
@@ -119,6 +124,52 @@ class CheckInCoordinatorTest {
         coordinator(api, PendingResults(), appUsage = appUsage).runOnce()
 
         assertEquals(listOf(report), api.checkInRequests.single().appUsage)
+    }
+
+    @Test
+    fun `reconciles persisted application allowlist on every check-in`() = runTest {
+        val store = InMemoryConfigStateStore().apply {
+            save(ConfigApplyPayload(
+                revision = "r1",
+                applications = ConfigApplications(
+                    enforceAllowlist = true,
+                    allowedPackages = listOf("com.example.allowed"),
+                ),
+            ))
+        }
+        var enabled: Boolean? = null
+        var allowed: Set<String>? = null
+        val allowlist = ApplicationAllowlist { value, packages ->
+            enabled = value
+            allowed = packages
+            ApplicationAllowlistResult(true)
+        }
+        val api = FakeMdmApi()
+        val identity = FakeIdentity(initialId = "dev-1", initialSecret = "sek-1")
+        val eventSink = object : com.mdmesh.core.telemetry.EventSink {
+            override fun record(type: String, detail: String?) {}
+            override fun drain() = emptyList<com.mdmesh.proto.TelemetryEventDto>()
+            override fun restore(events: List<com.mdmesh.proto.TelemetryEventDto>) {}
+        }
+        val enrollment = EnrollmentManager(api, identity, FakeTokenProvider("t"), FakeCapabilitySource(), eventSink)
+        val coordinator = CheckInCoordinator(
+            api = api,
+            enrollment = enrollment,
+            identity = identity,
+            capabilitySource = FakeCapabilitySource(),
+            dispatcher = CommandDispatcher(listOf(TestHandler())),
+            pending = PendingResults(),
+            stateSource = { null },
+            telemetrySource = { null },
+            eventSink = eventSink,
+            configStateStore = store,
+            applicationAllowlist = allowlist,
+        )
+
+        coordinator.runOnce()
+
+        assertEquals(true, enabled)
+        assertEquals(setOf("com.example.allowed"), allowed)
     }
 
     @Test

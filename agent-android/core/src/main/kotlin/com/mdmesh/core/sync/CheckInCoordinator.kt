@@ -5,8 +5,12 @@ import com.mdmesh.core.command.CommandDispatcher
 import com.mdmesh.core.net.MdmApi
 import com.mdmesh.core.state.DeviceStateSource
 import com.mdmesh.core.store.DeviceIdentity
+import com.mdmesh.core.store.ConfigStateStore
+import com.mdmesh.core.store.InMemoryConfigStateStore
 import com.mdmesh.core.telemetry.EventSink
 import com.mdmesh.core.telemetry.TelemetrySource
+import com.mdmesh.policy.ApplicationAllowlist
+import com.mdmesh.policy.ApplicationAllowlistResult
 import com.mdmesh.proto.AgentCheckInRequest
 import com.mdmesh.proto.EventType
 import com.mdmesh.core.usage.AppUsageManager
@@ -47,12 +51,28 @@ class CheckInCoordinator @Inject constructor(
     private val hardwareIdSource: HardwareIdSource = HardwareIdSource { null },
     private val syncStatus: SyncStatus = SyncStatus(),
     private val appUsage: AppUsageManager = UnsupportedAppUsageManager,
+    private val configStateStore: ConfigStateStore = InMemoryConfigStateStore(),
+    private val applicationAllowlist: ApplicationAllowlist = ApplicationAllowlist { _, _ ->
+        ApplicationAllowlistResult(false)
+    },
 ) {
 
     private val mutex = Mutex()
 
     suspend fun runOnce(): Unit = mutex.withLock {
         try {
+            // Package broadcasts are not reliable on every OEM/Play Store combination. Reconcile
+            // the locally persisted allowlist on every check-in as a desired-state safety net, so
+            // an app missed by PACKAGE_ADDED cannot remain usable indefinitely merely because the
+            // server-side configuration revision has not changed.
+            runCatching {
+                configStateStore.load()?.applications?.let { applications ->
+                    applicationAllowlist.apply(
+                        applications.enforceAllowlist,
+                        applications.allowedPackages.toSet(),
+                    )
+                }
+            }
             // Commands are delivered in one response, while their ACKs and any resulting state
             // (notably appliedConfigRevision) travel in the next request. Flush that follow-up
             // immediately so the server/UI sees convergence now instead of at the next 15-minute

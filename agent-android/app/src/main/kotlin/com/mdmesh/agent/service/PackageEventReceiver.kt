@@ -23,10 +23,12 @@ class PackageEventReceiver : BroadcastReceiver() {
         // ACTION_PACKAGE_ADDED fires on update too; EXTRA_REPLACING distinguishes a fresh install.
         val replacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)
         when (intent.action) {
-            Intent.ACTION_PACKAGE_ADDED -> if (!replacing) {
-                runCatching { EventLog(context).record(EventType.APP_INSTALLED, pkg) }
-                // Close the WorkManager scheduling window: hide a newly installed launcher app
-                // synchronously, then let the worker reconcile the complete package inventory.
+            Intent.ACTION_PACKAGE_ADDED -> {
+                if (!replacing) runCatching { EventLog(context).record(EventType.APP_INSTALLED, pkg) }
+                // Enforce both fresh installs and replacements. Play Store/OEM restore flows can
+                // report an app as EXTRA_REPLACING when the package existed previously (including
+                // archived/dormant installs); skipping that broadcast leaves it launchable outside
+                // the allowlist. Telemetry still records only genuinely new installations above.
                 if (pkg != null) runCatching {
                     configStateStore.load()?.applications?.let { apps ->
                         applicationAllowlist.applyPackage(
@@ -43,7 +45,7 @@ class PackageEventReceiver : BroadcastReceiver() {
         // A newly installed launcher app must not remain usable until the next periodic check-in.
         // Removal also prunes the set of packages whose hidden state MDMesh owns.
         runCatching { ConfigReapplyWorker.scheduleNow(context) }
-        if (intent.action == Intent.ACTION_PACKAGE_ADDED && !replacing) {
+        if (intent.action == Intent.ACTION_PACKAGE_ADDED) {
             runCatching { ConfigReapplyWorker.scheduleAfterPackageSettles(context) }
         }
     }
