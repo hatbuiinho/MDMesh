@@ -78,7 +78,7 @@ public class AgentCommandDAO {
         return mapper.claimForDelivery(commandId, deliveredAt) == 1;
     }
 
-    /** Return config.apply commands with a lost result to the delivery queue. */
+    /** Return delivered/accepted config.apply commands with a lost final result to the delivery queue. */
     public boolean requeueStaleConfigApply(String deviceNumber, long leaseMillis, long now) {
         return mapper.requeueStaleConfigApply(deviceNumber, now - leaseMillis) > 0;
     }

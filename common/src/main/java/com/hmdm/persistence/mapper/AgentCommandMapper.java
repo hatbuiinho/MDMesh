@@ -57,13 +57,13 @@ public interface AgentCommandMapper {
     int claimForDelivery(@Param("id") Integer id, @Param("deliveredAt") Long deliveredAt);
 
     /**
-     * config.apply is idempotent and normally finishes in seconds. If its result is lost because
-     * the agent process or network dies between execution and the next check-in, lease it back to
+     * config.apply is idempotent and normally finishes in seconds. If its final result is lost
+     * after delivery or acceptance because the agent process/network dies, lease it back to
      * pending so the device can converge instead of blocking configuration sync for six hours.
      */
     @Update({"UPDATE agentCommand SET status = 'pending', deliveredAt = NULL " +
             "WHERE deviceNumber = #{deviceNumber} AND type = 'config.apply' " +
-            "AND status = 'delivered' AND deliveredAt < #{deliveredCutoff}"})
+            "AND status IN ('delivered','accepted') AND deliveredAt < #{deliveredCutoff}"})
     int requeueStaleConfigApply(@Param("deviceNumber") String deviceNumber,
                                 @Param("deliveredCutoff") long deliveredCutoff);
 

@@ -364,9 +364,9 @@ public class AgentResource {
             }
         }
 
-        // config.apply is idempotent and fast. Re-deliver it when its ACK/result was lost between
-        // agent execution and the next check-in; otherwise one lost in-memory result blocks all
-        // configuration reconciliation for the full delivered-command TTL below.
+        // config.apply is idempotent and fast. Re-deliver it when its final result was lost after
+        // delivery or acceptance; otherwise one lost in-memory result blocks all configuration
+        // reconciliation for the full delivered-command TTL below.
         commandDAO.requeueStaleConfigApply(deviceNumber, 2L * 60L * 1000L, System.currentTimeMillis());
 
         // Lazily expire commands nobody acted on before delivering more. Undelivered (pending)

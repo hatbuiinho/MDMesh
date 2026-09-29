@@ -154,11 +154,15 @@ public class AgentRolloutDatabaseTest {
     @Test public void staleConfigApplyIsRequeuedWithoutTouchingOtherCommands() throws Exception {
         sql("INSERT INTO agentCommand(deviceNumber,type,status,createdAt,deliveredAt) VALUES" +
                 "('offline','config.apply','delivered',1,10)," +
-                "('offline','app.install','delivered',1,10)");
+                "('offline','config.apply','accepted',1,10)," +
+                "('offline','config.apply','accepted',1,12)," +
+                "('offline','app.install','accepted',1,10)");
         AgentCommandMapper commands = session.getMapper(AgentCommandMapper.class);
-        assertEquals(1, commands.requeueStaleConfigApply("offline", 11));
-        assertEquals(1, commands.listPending("offline").size());
-        assertEquals("config.apply", commands.listPending("offline").get(0).getType());
+        assertEquals(2, commands.requeueStaleConfigApply("offline", 11));
+        assertEquals(2, commands.listPending("offline").size());
+        for (AgentCommand command : commands.listPending("offline")) {
+            assertEquals("config.apply", command.getType());
+        }
         assertEquals(0, commands.requeueStaleConfigApply("offline", 11));
     }
 }
