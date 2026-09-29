@@ -196,9 +196,13 @@ public final class DesiredConfigBuilder {
     }
 
     public static String requiredCapability(DesiredConfig doc) {
-        if (doc != null && doc.getWebAccess() != null) return WEB_ACCESS_CAPABILITY;
-        if (doc != null && doc.getAppUsage() != null) return APP_USAGE_CAPABILITY;
-        return doc != null && doc.getApplications() != null && doc.getApplications().isEnforceAllowlist()
-                ? APP_ALLOWLIST_CAPABILITY : CAPABILITY;
+        List<String> required = new ArrayList<String>();
+        required.add(CAPABILITY);
+        if (doc != null && doc.getApplications() != null && doc.getApplications().isEnforceAllowlist()) {
+            required.add(APP_ALLOWLIST_CAPABILITY);
+        }
+        if (doc != null && doc.getAppUsage() != null) required.add(APP_USAGE_CAPABILITY);
+        if (doc != null && doc.getWebAccess() != null) required.add(WEB_ACCESS_CAPABILITY);
+        return String.join("&", required);
     }
 }

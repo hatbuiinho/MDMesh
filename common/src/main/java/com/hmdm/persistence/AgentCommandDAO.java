@@ -59,6 +59,10 @@ public class AgentCommandDAO {
         mapper.insert(command);
     }
 
+    public boolean insertConfigApplyIfAbsent(AgentCommand command) {
+        return mapper.insertConfigApplyIfAbsent(command) == 1;
+    }
+
     public List<AgentCommand> listPending(String deviceNumber) {
         return mapper.listPending(deviceNumber);
     }
@@ -189,6 +193,10 @@ public class AgentCommandDAO {
     /** True if a pending or delivered command of {@code type} is already queued for the device. */
     public boolean hasOpenOfType(String deviceNumber, String type) {
         return mapper.countOpenOfType(deviceNumber, type) > 0;
+    }
+
+    public int cancelSupersededConfigApply(String deviceNumber, String payload, long now) {
+        return mapper.cancelSupersededConfigApply(deviceNumber, payload, now);
     }
 
     /** True if the same command payload is already waiting or in flight for the device. */

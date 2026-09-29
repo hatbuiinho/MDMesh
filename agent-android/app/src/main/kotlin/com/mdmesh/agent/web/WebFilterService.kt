@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.Intent
 import android.net.VpnService
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import androidx.core.app.NotificationCompat
@@ -19,15 +20,21 @@ import java.util.concurrent.Executors
 class WebFilterService : VpnService() {
     private var tun: ParcelFileDescriptor? = null
     private val worker = Executors.newSingleThreadExecutor()
-    @Volatile private var policy: Pair<String, DomainMatcher> = "OFF" to DomainMatcher(emptySet())
+    @Volatile private var policy = WebFilterPolicy("OFF", emptySet(), emptySet())
     @Volatile private var resolver: InetAddress = InetAddress.getByName("1.1.1.1")
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         foreground()
-        val saved = WebFilterConfig.load(this)
-        policy = saved.first to DomainMatcher(saved.second)
+        policy = WebFilterConfig.load(this)
         val connectivity = getSystemService(ConnectivityManager::class.java)
-        resolver = connectivity.getLinkProperties(connectivity.activeNetwork)?.dnsServers?.firstOrNull() ?: resolver
+        resolver = connectivity.allNetworks.asSequence()
+            .filter { network ->
+                val capabilities = connectivity.getNetworkCapabilities(network)
+                capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true &&
+                    !capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+            }
+            .mapNotNull { connectivity.getLinkProperties(it)?.dnsServers?.firstOrNull() }
+            .firstOrNull() ?: resolver
         if (tun == null) startTunnel()
         return START_STICKY
     }
@@ -36,6 +43,9 @@ class WebFilterService : VpnService() {
         tun = Builder().setSession("MDMesh Web Filter")
             .setMtu(1500).addAddress("10.253.0.1", 30)
             .addDnsServer("10.253.0.2").addRoute("10.253.0.2", 32)
+            // The management control-plane must remain reachable even if an administrator enters
+            // an overly broad deny rule. Other applications still use the filtered DNS route.
+            .addDisallowedApplication(packageName)
             .setBlocking(true).establish()
         val descriptor = tun ?: return
         worker.execute { loop(descriptor) }
@@ -55,9 +65,7 @@ class WebFilterService : VpnService() {
             val ihl = (buffer[0].toInt() and 0x0f) * 4
             val dnsOffset = ihl + 8
             val host = readQuestionName(buffer, dnsOffset, size) ?: continue
-            val (mode, matcher) = policy
-            val listed = matcher.contains(host)
-            val blocked = mode == "ALLOWLIST" && !listed || mode == "BLOCKLIST" && listed
+            val blocked = policy.blocks(host)
             val query = buffer.copyOfRange(dnsOffset, size)
             val response = if (blocked) nxdomain(query) else upstream(query) ?: continue
             output.write(ipv4UdpReply(buffer, ihl, response))

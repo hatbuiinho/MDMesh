@@ -120,10 +120,10 @@ public final class AgentCapabilityTokens {
     }
 
     /**
-     * <p>The gate: a command is allowed to a device iff it requires no capability, or the required
-     * capability is present in the device's flattened token set.</p>
+     * <p>The gate: a command is allowed iff it is ungated, or every token in its optional
+     * {@code &}-joined capability expression is present in the device's flattened token set.</p>
      *
-     * @param requiresCapability the command's required capability token, or null for ungated.
+     * @param requiresCapability one token, an {@code &}-joined all-of expression, or null for ungated.
      * @param deviceTokens       the device's current capability token set (treated as empty if null).
      * @return {@code true} if the command may be delivered.
      */
@@ -131,6 +131,13 @@ public final class AgentCapabilityTokens {
         if (requiresCapability == null || requiresCapability.isEmpty()) {
             return true;
         }
-        return deviceTokens != null && deviceTokens.contains(requiresCapability);
+        if (deviceTokens == null) return false;
+        // A command may require several independent feature tokens.  '&' is deliberately not a
+        // valid token character in the capability matrix, so legacy single-token values retain
+        // exactly their old meaning.
+        for (String required : requiresCapability.split("&")) {
+            if (required.isEmpty() || !deviceTokens.contains(required)) return false;
+        }
+        return true;
     }
 }

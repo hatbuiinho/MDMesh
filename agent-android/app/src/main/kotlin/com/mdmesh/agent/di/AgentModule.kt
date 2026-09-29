@@ -29,6 +29,7 @@ import com.mdmesh.core.command.handlers.DevicePowerModeHandler
 import com.mdmesh.core.command.handlers.DeviceRingStopHandler
 import com.mdmesh.core.command.handlers.DeviceWipeHandler
 import com.mdmesh.core.config.ConfigApplier
+import com.mdmesh.core.config.ServerConfigStore
 import com.mdmesh.core.location.LocationModeStore
 import com.mdmesh.core.power.PowerModeStore
 import com.mdmesh.core.command.handlers.KioskEnterHandler
@@ -358,8 +359,11 @@ object AgentModule {
 
     @Provides
     @Singleton
-    fun provideWebAccessManager(@ApplicationContext context: Context, handle: DpmHandle): WebAccessManager =
-        AndroidWebAccessManager(context, handle.dpm, handle.admin)
+    fun provideWebAccessManager(
+        @ApplicationContext context: Context,
+        handle: DpmHandle,
+        serverConfig: ServerConfigStore,
+    ): WebAccessManager = AndroidWebAccessManager(context, handle.dpm, handle.admin, serverConfig)
 
     @Provides
     @Singleton

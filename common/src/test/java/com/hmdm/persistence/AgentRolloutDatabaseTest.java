@@ -37,6 +37,8 @@ public class AgentRolloutDatabaseTest {
             s.execute("CREATE UNIQUE INDEX uq_agentRollout_active ON agentRollout(customerId) WHERE stage IN ('canary','fleet')");
             s.execute("CREATE TABLE agentRolloutCanary(rolloutId INT, deviceNumber TEXT, PRIMARY KEY(rolloutId,deviceNumber))");
             s.execute("CREATE TABLE agentCommand(id SERIAL PRIMARY KEY, deviceNumber TEXT, type TEXT, payload TEXT, requiresCapability TEXT, status TEXT, detail TEXT, createdAt BIGINT, deliveredAt BIGINT, completedAt BIGINT)");
+            s.execute("CREATE UNIQUE INDEX uq_agentCommand_config_apply_open ON agentCommand(deviceNumber) " +
+                    "WHERE type='config.apply' AND status IN ('pending','delivered','accepted')");
             s.execute("CREATE TABLE device_state(deviceNumber TEXT PRIMARY KEY, battery INT, charging BOOLEAN, locked BOOLEAN, kioskActive BOOLEAN, androidRelease TEXT, lastBootAt BIGINT, updatedAt BIGINT, agentVersion TEXT, powerMode TEXT, telemetry TEXT, appliedConfigRevision TEXT, appliedConfigAt BIGINT)");
             // Execute the actual migration, not a copied version of its SQL.
             Document doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(new File("../server/src/main/resources/liquibase/db.changelog.xml"));
@@ -164,5 +166,18 @@ public class AgentRolloutDatabaseTest {
             assertEquals("config.apply", command.getType());
         }
         assertEquals(0, commands.requeueStaleConfigApply("offline", 11));
+    }
+
+    @Test public void configApplyRecoveryHandlesMissingTimestampsAndSupersedesOldPayload() throws Exception {
+        sql("INSERT INTO agentCommand(deviceNumber,type,payload,status,createdAt,deliveredAt) VALUES" +
+                "('offline','config.apply','old','accepted',NULL,NULL)");
+        AgentCommandMapper commands = session.getMapper(AgentCommandMapper.class);
+        assertEquals(1, commands.requeueStaleConfigApply("offline", 1));
+        assertEquals(1, commands.cancelSupersededConfigApply("offline", "new", 20));
+
+        AgentCommand fresh = new AgentCommand(); fresh.setDeviceNumber("offline"); fresh.setPayload("new");
+        fresh.setRequiresCapability("device.configApply"); fresh.setCreatedAt(21L);
+        assertEquals(1, commands.insertConfigApplyIfAbsent(fresh));
+        assertEquals(0, commands.insertConfigApplyIfAbsent(fresh));
     }
 }

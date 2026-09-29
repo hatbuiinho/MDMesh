@@ -132,4 +132,14 @@ public class AgentCapabilityTokensTest {
         Assert.assertFalse(AgentCapabilityTokens.isAllowed("policy.wifi", null));
         Assert.assertFalse(AgentCapabilityTokens.isAllowed("policy.wifi", Collections.emptySet()));
     }
+
+    @Test
+    public void testCompoundRequirementNeedsEveryToken() {
+        Set<String> complete = AgentCapabilityTokens.flatten(
+                "{\"device\":[\"configApply\",\"webFilter\"],\"appManagement\":[\"usageLimit\"]}");
+        Assert.assertTrue(AgentCapabilityTokens.isAllowed(
+                "device.configApply&app.usageLimit&device.webFilter", complete));
+        Assert.assertFalse(AgentCapabilityTokens.isAllowed(
+                "device.configApply&app.appAllowlist&device.webFilter", complete));
+    }
 }

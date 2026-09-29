@@ -67,13 +67,17 @@ public class ConfigReconciler {
             DesiredConfig doc = currentDocument(device);
             if (doc == null) return false;
             String requiredCapability = DesiredConfigBuilder.requiredCapability(doc);
-            // Never let an old config.apply-capable agent acknowledge a revision containing a policy
-            // it silently ignores. It must advertise app.appAllowlist before receiving this document.
+            // Never let an old config.apply-capable agent acknowledge a revision containing any
+            // policy it silently ignores. Require every feature used by this document.
             if (!AgentCapabilityTokens.isAllowed(requiredCapability, deviceTokens)) return false;
             // Steady state (device already applied this revision) must cost only the config + apps
             // selects: skip the command-queue lookups entirely. decide() would return NOOP anyway.
             if (doc.getRevision().equals(appliedRevision)) return false;
             String number = device.getNumber();
+            String payload = DesiredConfigBuilder.toPayloadJson(doc);
+            // An older open command must never block a newer desired revision. This also releases
+            // pending commands whose old capability gate is no longer satisfiable by the agent.
+            commandDAO.cancelSupersededConfigApply(number, payload, now);
             boolean open = commandDAO.hasOpenOfType(number, DesiredConfigBuilder.COMMAND_TYPE);
             AgentCommand latest = open ? null : commandDAO.findLatestOfType(number, DesiredConfigBuilder.COMMAND_TYPE);
             if (ConfigReconcileDecision.decide(deviceTokens, doc.getRevision(), appliedRevision, open, latest, now)
@@ -83,11 +87,11 @@ public class ConfigReconciler {
             AgentCommand cmd = new AgentCommand();
             cmd.setDeviceNumber(number);
             cmd.setType(DesiredConfigBuilder.COMMAND_TYPE);
-            cmd.setPayload(DesiredConfigBuilder.toPayloadJson(doc));
+            cmd.setPayload(payload);
             cmd.setRequiresCapability(requiredCapability);
             cmd.setStatus("pending");
             cmd.setCreatedAt(now);
-            commandDAO.insert(cmd);
+            if (!commandDAO.insertConfigApplyIfAbsent(cmd)) return false;
             logger.info("config.apply queued for {} (revision {} -> {})", number, appliedRevision, doc.getRevision());
             return true;
         } catch (Exception e) {

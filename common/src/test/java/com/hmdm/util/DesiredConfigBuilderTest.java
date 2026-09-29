@@ -5,6 +5,8 @@ import com.hmdm.persistence.domain.Configuration;
 import com.hmdm.persistence.domain.IconSize;
 import com.hmdm.persistence.domain.RequestUpdatesType;
 import com.hmdm.rest.json.agent.DesiredConfig;
+import com.hmdm.rest.json.agent.DesiredAppUsage;
+import com.hmdm.rest.json.agent.DesiredWebAccess;
 import org.junit.Test;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -102,7 +104,8 @@ public class DesiredConfigBuilderTest {
         assertTrue(d.getApplications().isEnforceAllowlist());
         assertEquals(Arrays.asList("com.acme.pos", "com.android.settings", "com.vendor.updater"),
                 d.getApplications().getAllowedPackages());
-        assertEquals(DesiredConfigBuilder.APP_ALLOWLIST_CAPABILITY, DesiredConfigBuilder.requiredCapability(d));
+        assertEquals(DesiredConfigBuilder.CAPABILITY + "&" + DesiredConfigBuilder.APP_ALLOWLIST_CAPABILITY,
+                DesiredConfigBuilder.requiredCapability(d));
     }
 
     @Test
@@ -110,6 +113,16 @@ public class DesiredConfigBuilderTest {
         DesiredConfig d = DesiredConfigBuilder.build(kioskConfig(), Collections.emptyList());
         assertFalse(d.getApplications().isEnforceAllowlist());
         assertEquals(DesiredConfigBuilder.CAPABILITY, DesiredConfigBuilder.requiredCapability(d));
+    }
+
+    @Test
+    public void all_policy_capabilities_are_required_together() {
+        DesiredConfig d = DesiredConfigBuilder.build(kioskConfig(), Collections.emptyList());
+        d.getApplications().setEnforceAllowlist(true);
+        d.setAppUsage(new DesiredAppUsage());
+        d.setWebAccess(new DesiredWebAccess());
+        assertEquals("device.configApply&app.appAllowlist&app.usageLimit&device.webFilter",
+                DesiredConfigBuilder.requiredCapability(d));
     }
 
     @Test

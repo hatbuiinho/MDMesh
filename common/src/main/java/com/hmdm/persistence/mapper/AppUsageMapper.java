@@ -42,6 +42,8 @@ public interface AppUsageMapper {
             "ON CONFLICT(deviceNumber,packageName) DO UPDATE SET extraMinutes=EXCLUDED.extraMinutes,expiresAt=EXCLUDED.expiresAt,createdAt=EXCLUDED.createdAt")
     void upsertOverride(AppUsageOverride row);
 
-    @Select("SELECT o.* FROM appUsageOverride o JOIN devices d ON d.number=o.deviceNumber WHERE d.configurationId=#{configurationId} AND o.expiresAt>#{now}")
+    @Select("SELECT o.* FROM appUsageOverride o JOIN devices d ON d.number=o.deviceNumber " +
+            "WHERE d.configurationId=#{configurationId} AND o.expiresAt>#{now} " +
+            "ORDER BY o.deviceNumber,o.packageName")
     List<AppUsageOverride> activeOverrides(@Param("configurationId") int configurationId, @Param("now") long now);
 }

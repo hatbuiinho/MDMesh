@@ -42,6 +42,13 @@ public interface AgentCommandMapper {
             before = false, resultType = int.class)
     void insert(AgentCommand command);
 
+    /** Insert one config.apply only when this device has no open one (enforced by a partial unique index). */
+    @Insert({"INSERT INTO agentCommand (deviceNumber, type, payload, requiresCapability, status, createdAt, deliveredAt) " +
+            "VALUES (#{deviceNumber}, 'config.apply', #{payload}, #{requiresCapability}, 'pending', #{createdAt}, NULL) " +
+            "ON CONFLICT (deviceNumber) WHERE type = 'config.apply' " +
+            "AND status IN ('pending','delivered','accepted') DO NOTHING"})
+    int insertConfigApplyIfAbsent(AgentCommand command);
+
     @Select({"SELECT * FROM agentCommand WHERE deviceNumber = #{deviceNumber} AND status = 'pending' ORDER BY id"})
     List<AgentCommand> listPending(@Param("deviceNumber") String deviceNumber);
 
@@ -63,7 +70,8 @@ public interface AgentCommandMapper {
      */
     @Update({"UPDATE agentCommand SET status = 'pending', deliveredAt = NULL " +
             "WHERE deviceNumber = #{deviceNumber} AND type = 'config.apply' " +
-            "AND status IN ('delivered','accepted') AND deliveredAt < #{deliveredCutoff}"})
+            "AND status IN ('delivered','accepted') " +
+            "AND COALESCE(deliveredAt, createdAt, 0) < #{deliveredCutoff}"})
     int requeueStaleConfigApply(@Param("deviceNumber") String deviceNumber,
                                 @Param("deliveredCutoff") long deliveredCutoff);
 
@@ -89,8 +97,8 @@ public interface AgentCommandMapper {
      */
     @Update({"UPDATE agentCommand SET status = 'expired', completedAt = #{now} " +
             "WHERE deviceNumber = #{deviceNumber} AND (" +
-            "(status = 'pending' AND createdAt < #{pendingCutoff}) OR " +
-            "(status IN ('delivered','accepted') AND deliveredAt IS NOT NULL AND deliveredAt < #{deliveredCutoff}))"})
+            "(status = 'pending' AND COALESCE(createdAt, 0) < #{pendingCutoff}) OR " +
+            "(status IN ('delivered','accepted') AND COALESCE(deliveredAt, createdAt, 0) < #{deliveredCutoff}))"})
     void expireStale(@Param("deviceNumber") String deviceNumber, @Param("pendingCutoff") long pendingCutoff,
                      @Param("deliveredCutoff") long deliveredCutoff, @Param("now") long now);
 
@@ -115,6 +123,14 @@ public interface AgentCommandMapper {
 
     @Select({"SELECT COUNT(*) FROM agentCommand WHERE deviceNumber = #{deviceNumber} AND type = #{type} AND status IN ('pending','delivered','accepted')"})
     int countOpenOfType(@Param("deviceNumber") String deviceNumber, @Param("type") String type);
+
+    /** A newer desired revision makes every different open config.apply obsolete immediately. */
+    @Update({"UPDATE agentCommand SET status = 'cancelled', " +
+            "detail = 'Superseded by a newer configuration revision', completedAt = #{now} " +
+            "WHERE deviceNumber = #{deviceNumber} AND type = 'config.apply' " +
+            "AND status IN ('pending','delivered','accepted') AND payload IS DISTINCT FROM #{payload}"})
+    int cancelSupersededConfigApply(@Param("deviceNumber") String deviceNumber,
+                                    @Param("payload") String payload, @Param("now") long now);
 
     /** Open command with the exact same intent. Used to make automatic app sync idempotent. */
     @Select({"SELECT COUNT(*) FROM agentCommand WHERE deviceNumber = #{deviceNumber} AND type = #{type} " +

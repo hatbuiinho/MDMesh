@@ -17,4 +17,22 @@ class DomainMatcherTest {
         assertFalse(matcher.contains("notexample.com"))
         assertFalse(matcher.contains("example.org"))
     }
+
+    @Test fun `runtime mdm host bypasses an empty allowlist`() {
+        val policy = WebFilterPolicy("ALLOWLIST", emptySet(), setOf("mdm.customer.example"))
+        assertFalse(policy.blocks("mdm.customer.example"))
+        assertFalse(policy.blocks("push.mdm.customer.example"))
+        assertTrue(policy.blocks("unrelated.example"))
+    }
+
+    @Test fun `runtime mdm host bypasses a matching parent block rule`() {
+        val policy = WebFilterPolicy("BLOCKLIST", setOf("customer.example"), setOf("mdm.customer.example"))
+        assertFalse(policy.blocks("mdm.customer.example"))
+        assertFalse(policy.blocks("push.mdm.customer.example"))
+        assertTrue(policy.blocks("www.customer.example"))
+    }
+
+    @Test fun `normalization removes wildcard casing and trailing dot`() {
+        assertTrue(WebFilterConfig.normalized(listOf(" *.Example.COM. ")).contains("example.com"))
+    }
 }

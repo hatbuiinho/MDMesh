@@ -14,6 +14,8 @@ import com.mdmesh.proto.CommandEnvelope
 import com.mdmesh.proto.CommandStatus
 import com.mdmesh.proto.ConfigApplyResult
 import com.mdmesh.proto.ProtocolJson
+import com.mdmesh.core.web.WebAccessManager
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -47,5 +49,20 @@ class ConfigApplyHandlerTest {
     @Test fun `missing or bad payload fails`() = runTest {
         assertEquals(CommandStatus.FAILED, handler(PolicyOutcome.Applied).handle(cmd(null)).status)
         assertEquals(CommandStatus.FAILED, handler(PolicyOutcome.Applied).handle(cmd(buildJsonObject { put("revision", 5) })).status)
+    }
+
+    @Test fun `hung config subsystem times out as failed`() = runTest {
+        val applier = ConfigApplier(
+            emptyMap(), KioskApplier(StubKioskController(), InMemoryKioskStateStore(), NoHome, ComponentName("a", "b")),
+            {}, InMemoryConfigStateStore(), webAccess = WebAccessManager { awaitCancellation() },
+        )
+        val withWeb = buildJsonObject {
+            put("revision", "r1")
+            put("configurationId", 1)
+            putJsonObject("webAccess") { put("mode", "BLOCKLIST") }
+        }
+        val r = ConfigApplyHandler(applier, applyTimeoutMs = 1).handle(cmd(withWeb))
+        assertEquals(CommandStatus.FAILED, r.status)
+        assertEquals("config.apply timed out after 1ms", r.detail)
     }
 }

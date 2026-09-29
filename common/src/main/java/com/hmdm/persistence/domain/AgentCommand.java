@@ -27,8 +27,8 @@ import java.io.Serializable;
 
 /**
  * <p>A single queued command for the from-scratch Android agent v1 protocol. {@code type} and
- * {@code payload} are stored verbatim and never interpreted by the server; delivery is gated only
- * by {@code requiresCapability} set-membership against the device's flattened capability tokens.</p>
+ * {@code payload} are stored verbatim and never interpreted by the server; delivery is gated by
+ * the single-token or {@code &}-joined expression in {@code requiresCapability}.</p>
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class AgentCommand implements Serializable {

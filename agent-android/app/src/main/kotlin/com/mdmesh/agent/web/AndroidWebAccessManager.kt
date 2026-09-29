@@ -6,19 +6,21 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import com.mdmesh.core.web.WebAccessManager
+import com.mdmesh.core.config.ServerConfigStore
 import com.mdmesh.proto.ConfigOutcome
 import com.mdmesh.proto.WebAccessPolicy
-import com.mdmesh.agent.BuildConfig
 import java.net.URI
 
 class AndroidWebAccessManager(
     private val context: Context,
     private val dpm: DevicePolicyManager,
     private val admin: ComponentName,
+    private val serverConfig: ServerConfigStore,
 ) : WebAccessManager {
     override suspend fun apply(policy: WebAccessPolicy?): String = runCatching {
         check(dpm.isDeviceOwnerApp(context.packageName)) { "device owner required" }
-        WebFilterConfig.save(context, policy)
+        val protectedHost = runCatching { URI(serverConfig.baseUrl()).host }.getOrNull()
+        WebFilterConfig.save(context, policy, protectedHost)
         if (policy == null || policy.mode == "OFF") {
             dpm.setAlwaysOnVpnPackage(admin, null, false)
             context.stopService(Intent(context, WebFilterService::class.java))
@@ -36,18 +38,39 @@ class AndroidWebAccessManager(
 
 internal object WebFilterConfig {
     private const val PREFS = "web_filter"
-    fun save(context: Context, policy: WebAccessPolicy?) {
-        val protectedHost = runCatching { URI(BuildConfig.MDM_BASE_URL).host }.getOrNull()
-        val domains = policy?.domains.orEmpty().map(DomainMatcher::normalize).filter(String::isNotEmpty).toMutableSet()
-        protectedHost?.let(DomainMatcher::normalize)?.takeIf(String::isNotEmpty)?.let {
-            if (policy?.mode == "ALLOWLIST") domains.add(it) else domains.remove(it)
-        }
+    fun save(context: Context, policy: WebAccessPolicy?, protectedHost: String?) {
+        val domains = normalized(policy?.domains.orEmpty())
+        val protected = normalized(listOfNotNull(protectedHost))
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString("mode", policy?.mode ?: "OFF")
-            .putStringSet("domains", domains).apply()
+            .putStringSet("domains", domains)
+            .putStringSet("protectedDomains", protected)
+            .apply()
     }
-    fun load(context: Context): Pair<String, Set<String>> {
+    fun load(context: Context): WebFilterPolicy {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        return (p.getString("mode", "OFF") ?: "OFF") to (p.getStringSet("domains", emptySet()) ?: emptySet())
+        return WebFilterPolicy(
+            p.getString("mode", "OFF") ?: "OFF",
+            p.getStringSet("domains", emptySet()) ?: emptySet(),
+            p.getStringSet("protectedDomains", emptySet()) ?: emptySet(),
+        )
+    }
+
+    internal fun normalized(domains: Collection<String>): Set<String> = domains
+        .asSequence().map(DomainMatcher::normalize).filter(String::isNotEmpty).toSet()
+}
+
+internal data class WebFilterPolicy(
+    val mode: String,
+    val domains: Set<String>,
+    val protectedDomains: Set<String>,
+) {
+    private val matcher = DomainMatcher(domains)
+    private val protectedMatcher = DomainMatcher(protectedDomains)
+
+    fun blocks(host: String): Boolean {
+        if (protectedMatcher.contains(host)) return false
+        val listed = matcher.contains(host)
+        return mode == "ALLOWLIST" && !listed || mode == "BLOCKLIST" && listed
     }
 }

@@ -2955,4 +2955,21 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="26.09.29-config-apply-single-open" author="mdmesh" context="common">
+        <comment>Guarantee one open config.apply per device; retire duplicates left by racing check-ins.</comment>
+        <sql>
+            UPDATE agentCommand stale SET status = 'cancelled',
+                detail = 'Superseded while enforcing single open config.apply', completedAt = (EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::BIGINT
+            WHERE stale.type = 'config.apply' AND stale.status IN ('pending','delivered','accepted')
+              AND EXISTS (SELECT 1 FROM agentCommand newer
+                          WHERE newer.deviceNumber = stale.deviceNumber AND newer.type = 'config.apply'
+                            AND newer.status IN ('pending','delivered','accepted') AND newer.id > stale.id);
+            CREATE UNIQUE INDEX uq_agentCommand_config_apply_open ON agentCommand(deviceNumber)
+                WHERE type = 'config.apply' AND status IN ('pending','delivered','accepted');
+        </sql>
+        <rollback>
+            DROP INDEX uq_agentCommand_config_apply_open;
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>
