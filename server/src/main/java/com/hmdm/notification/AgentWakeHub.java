@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import javax.websocket.SendHandler;
 import javax.websocket.Session;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,6 +36,12 @@ public class AgentWakeHub {
 
     private final AgentCommandDAO commandDAO;
     private final Map<String, Session> sessions = new ConcurrentHashMap<>();
+    /**
+     * Wake signals are deliberately tiny and coalescible. Retain one for an offline device so a
+     * configuration save racing a WebSocket reconnect is not lost. This is only a latency aid:
+     * the regular authenticated check-in remains the durable reconciliation backstop.
+     */
+    private final Map<String, String> pendingWakes = new ConcurrentHashMap<>();
 
     @Inject
     public AgentWakeHub(AgentCommandDAO commandDAO) {
@@ -52,12 +59,16 @@ public class AgentWakeHub {
                 && CryptoUtil.constantTimeEquals(CryptoUtil.getSHA256String(secret), expectedHash);
     }
 
-    public void register(String deviceNumber, Session session) {
+    public synchronized void register(String deviceNumber, Session session) {
         Session previous = sessions.put(deviceNumber, session);
         if (previous != null && previous != session && previous.isOpen()) {
             try { previous.close(); } catch (Exception ignored) { }
         }
         log.debug("Agent wake socket registered for {}", deviceNumber);
+        String pending = pendingWakes.remove(deviceNumber);
+        if (pending != null) {
+            send(session, deviceNumber, pending);
+        }
     }
 
     public void unregister(String deviceNumber, Session session) {
@@ -69,19 +80,39 @@ public class AgentWakeHub {
         return s != null && s.isOpen();
     }
 
-    /** Send a wake-only signal to the device if connected. No-op (floor reconciles) when offline. */
-    public void wake(String deviceNumber, String wakeKind) {
+    /** Send now when connected, otherwise coalesce one signal for delivery on the next reconnect. */
+    public synchronized void wake(String deviceNumber, String wakeKind) {
         Session s = sessions.get(deviceNumber);
         if (s == null || !s.isOpen()) {
+            retain(deviceNumber, wakeKind);
             return;
         }
+        send(s, deviceNumber, wakeKind);
+    }
+
+    private void send(Session session, String deviceNumber, String wakeKind) {
         String payload = "interactive".equals(wakeKind)
                 ? "{\"wake\":\"interactive\",\"ttlSec\":120}"
                 : "{\"wake\":\"commands\"}";
         try {
-            s.getAsyncRemote().sendText(payload);
+            SendHandler completion = result -> {
+                if (!result.isOK()) {
+                    Throwable error = result.getException();
+                    log.warn("Agent wake send failed for {}: {}", deviceNumber,
+                            error == null ? "unknown asynchronous send failure" : error.getMessage());
+                    retain(deviceNumber, wakeKind);
+                }
+            };
+            session.getAsyncRemote().sendText(payload, completion);
         } catch (Exception e) {
             log.warn("Agent wake send failed for {}: {}", deviceNumber, e.getMessage());
+            retain(deviceNumber, wakeKind);
         }
+    }
+
+    /** Interactive wake includes command polling and must not be downgraded by a later command wake. */
+    private void retain(String deviceNumber, String wakeKind) {
+        pendingWakes.merge(deviceNumber, wakeKind,
+                (oldKind, newKind) -> "interactive".equals(oldKind) ? oldKind : newKind);
     }
 }

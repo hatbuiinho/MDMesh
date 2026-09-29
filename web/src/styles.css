@@ -646,17 +646,20 @@ a {
   align-items: center;
   gap: 8px;
 }
-.dev .dot {
+.dev .dot,
+.dev-row .dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   flex: none;
 }
 .dev .dot.on,
+.dev-row .dot.on,
 .detail-rail .dot.on {
   background: var(--online);
 }
 .dev .dot.off,
+.dev-row .dot.off,
 .detail-rail .dot.off {
   background: var(--offline);
 }
@@ -866,7 +869,8 @@ a {
 .dd-mobile-details,
 .mobile-only-tab,
 .dd-mobile-vitals,
-.dd-mobile-action-menu {
+.dd-mobile-action-menu,
+.dd-mobile-back {
   display: none;
 }
 .dd-detail-group {
@@ -2975,6 +2979,19 @@ a {
   .crumb {
     display: none;
   }
+  .dd-mobile-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 44px;
+    margin: -8px 0 8px;
+    padding: 0 6px;
+    border: 0;
+    background: transparent;
+    color: var(--secondary);
+    font: 600 13px var(--font-sans);
+    cursor: pointer;
+  }
   .dd-cols {
     gap: 12px;
   }
@@ -3033,6 +3050,9 @@ a {
   .dd-name {
     min-height: 44px;
   }
+  .detail-rail h1 {
+    overflow-wrap: anywhere;
+  }
   .dd-name svg {
     opacity: 0.8;
   }
@@ -3044,6 +3064,46 @@ a {
     min-width: 40px;
     min-height: 36px;
     opacity: 1;
+  }
+  .detail-main {
+    overflow: hidden;
+  }
+  .tabs {
+    padding-right: 28px;
+    background:
+      linear-gradient(to left, var(--surface) 8px, transparent 28px),
+      var(--surface);
+    background-attachment: local;
+  }
+  .tabs button {
+    padding-inline: 14px;
+  }
+  .tabbody {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .tabbody .action-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .tabbody .action-grid .btn {
+    width: 100%;
+    min-height: 44px;
+    white-space: normal;
+  }
+  .tabbody .timeline-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 5px 10px;
+    padding: 11px 0;
+  }
+  .tabbody .timeline-item .t-detail {
+    grid-column: 1 / -1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .tabbody .timeline-item .t-status {
+    align-self: start;
   }
   .vitals {
     grid-template-columns: 1fr;

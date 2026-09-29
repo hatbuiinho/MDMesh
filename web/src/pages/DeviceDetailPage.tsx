@@ -549,6 +549,14 @@ export function DeviceDetailPage() {
 
   return (
     <AppShell title={deviceDisplayName(device)}>
+      <button
+        type="button"
+        className="dd-mobile-back"
+        onClick={() => navigate('/devices')}
+        aria-label="Back to devices"
+      >
+        <span aria-hidden="true">←</span> Devices
+      </button>
       <div className="crumb">
         <a href="/devices" onClick={(e) => { e.preventDefault(); navigate('/devices'); }}>
           Devices
