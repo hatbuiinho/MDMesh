@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.mdmesh.agent.R
+import com.mdmesh.core.config.ConfigApplier
 import com.mdmesh.core.power.PowerModeStore
 import com.mdmesh.core.store.DeviceIdentity
 import com.mdmesh.core.sync.CheckInCoordinator
@@ -46,6 +47,7 @@ import javax.inject.Inject
 class CheckInService : LifecycleService() {
 
     @Inject lateinit var coordinator: CheckInCoordinator
+    @Inject lateinit var configApplier: ConfigApplier
     @Inject lateinit var transport: TransportManager
     @Inject lateinit var identity: DeviceIdentity
     @Inject lateinit var powerModeStore: PowerModeStore
@@ -69,6 +71,10 @@ class CheckInService : LifecycleService() {
                     runCatching { eventLog.record(EventType.CONNECTIVITY) }
                 Intent.ACTION_BATTERY_LOW ->
                     runCatching { eventLog.record(EventType.LOW_BATTERY) }
+                Intent.ACTION_SCREEN_ON -> lifecycleScope.launch {
+                    runCatching { configApplier.reapplyApplicationAllowlist() }
+                        .onFailure { Log.w(TAG, "screen-on allowlist reconciliation failed", it) }
+                }
             }
             reevaluateSocket()
         }
@@ -99,6 +105,8 @@ class CheckInService : LifecycleService() {
                 reevaluateSocket() // drop back to adaptive gating once the grace window lapses
             }
             lifecycleScope.launch {
+                runCatching { configApplier.reapplyApplicationAllowlist() }
+                    .onFailure { Log.w(TAG, "local config reconciliation failed", it) }
                 runCatching { coordinator.runOnce() } // initial sync
                     .onFailure { Log.w(TAG, "initial check-in failed", it) }
                 // Read identity AFTER the initial sync: on a fresh device that runOnce just
@@ -136,6 +144,8 @@ class CheckInService : LifecycleService() {
     }
 
     private suspend fun onWake(signal: WakeSignal) {
+        runCatching { configApplier.reapplyApplicationAllowlist() }
+            .onFailure { Log.w(TAG, "local config reconciliation failed", it) }
         when (signal.kind) {
             "interactive" -> {
                 interactiveUntil = System.currentTimeMillis() + (signal.ttlSec ?: 120) * 1000L
@@ -155,6 +165,8 @@ class CheckInService : LifecycleService() {
         fastSyncJob = lifecycleScope.launch {
             var consecutiveFailures = 0
             while (System.currentTimeMillis() < interactiveUntil) {
+                runCatching { configApplier.reapplyApplicationAllowlist() }
+                    .onFailure { Log.w(TAG, "local config reconciliation failed", it) }
                 runCatching { coordinator.runOnce() }
                     .onSuccess { consecutiveFailures = 0 }
                     .onFailure {

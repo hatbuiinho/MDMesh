@@ -4,6 +4,21 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ApplicationAllowlistPlannerTest {
+    @Test fun newlyInstalledPackageIsDeniedWithoutWaitingForLauncherDiscovery() {
+        assertEquals(true, ApplicationAllowlistPlanner.shouldHideNewPackage(
+            true, "com.example.new", setOf("com.example.allowed"), setOf("com.mdmesh.agent"),
+        ))
+        assertEquals(false, ApplicationAllowlistPlanner.shouldHideNewPackage(
+            true, "com.example.allowed", setOf("com.example.allowed"), emptySet(),
+        ))
+        assertEquals(false, ApplicationAllowlistPlanner.shouldHideNewPackage(
+            true, "com.mdmesh.agent", emptySet(), setOf("com.mdmesh.agent"),
+        ))
+        assertEquals(false, ApplicationAllowlistPlanner.shouldHideNewPackage(
+            false, "com.example.new", emptySet(), emptySet(),
+        ))
+    }
+
     @Test fun newlyInstalledLaunchablePackageIsHiddenUnlessAllowedOrProtected() {
         assertEquals(true, ApplicationAllowlistPlanner.shouldHidePackage(
             true, "com.example.new", true, setOf("com.example.allowed"), setOf("com.mdmesh.agent"),

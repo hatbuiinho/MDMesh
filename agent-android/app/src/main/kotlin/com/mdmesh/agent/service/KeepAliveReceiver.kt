@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import com.mdmesh.core.config.ConfigApplier
 import com.mdmesh.core.sync.CheckInCoordinator
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -24,6 +25,7 @@ import javax.inject.Inject
 class KeepAliveReceiver : BroadcastReceiver() {
 
     @Inject lateinit var coordinator: CheckInCoordinator
+    @Inject lateinit var configApplier: ConfigApplier
 
     override fun onReceive(context: Context, intent: Intent) {
         // Re-arm the next alarm BEFORE the check-in (FLAG_UPDATE_CURRENT makes it idempotent):
@@ -32,6 +34,8 @@ class KeepAliveReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                // Reconcile local restrictions even when the network check-in below fails.
+                configApplier.reapplyApplicationAllowlist()
                 coordinator.runOnce()
             } catch (e: Exception) {
                 Log.w(TAG, "heartbeat check-in failed", e) // transient — the next heartbeat retries

@@ -92,6 +92,19 @@ class ConfigApplier(
     /** Re-run the last fully-applied document (after boot / self-update). Null when nothing is persisted. */
     suspend fun reapplyPersisted(): ConfigApplyResult? = mutex.withLock { store.load()?.let { applyLocked(it) } }
 
+    /**
+     * Re-assert only the application allowlist from the last accepted document. Safe to call from
+     * frequent liveness paths: it does not replay kiosk, web, usage-limit, or location policy.
+     */
+    suspend fun reapplyApplicationAllowlist(): String? = mutex.withLock {
+        store.load()?.applications?.let { apps ->
+            applicationAllowlist.apply(
+                apps.enforceAllowlist,
+                apps.allowedPackages.toSet(),
+            ).outcome(enforcementRequired = apps.enforceAllowlist)
+        }
+    }
+
     companion object {
         fun succeeded(r: ConfigApplyResult): Boolean = r.outcomes.values.none(ConfigOutcome::isFailed)
     }

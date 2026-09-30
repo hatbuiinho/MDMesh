@@ -121,6 +121,24 @@ class ConfigApplierTest {
         assertEquals("applied: hidden=2, restored=0", r.outcomes["applications.allowlist"])
     }
 
+    @Test fun `targeted allowlist reconciliation uses persisted policy`() = runTest {
+        val store = InMemoryConfigStateStore().also {
+            it.save(ConfigApplyPayload(
+                revision = "apps-persisted",
+                applications = com.mdmesh.proto.ConfigApplications(true, listOf("com.acme.pos")),
+            ))
+        }
+        var invocation: Pair<Boolean, Set<String>>? = null
+        val allowlist = ApplicationAllowlist { enabled, allowed ->
+            invocation = enabled to allowed
+            ApplicationAllowlistResult(true, hidden = 1)
+        }
+        val applier = ConfigApplier(emptyMap(), kiosk(FakeController()), {}, store, allowlist)
+
+        assertEquals("applied: hidden=1, restored=0", applier.reapplyApplicationAllowlist())
+        assertEquals(true to setOf("com.acme.pos"), invocation)
+    }
+
     @Test fun `enabled unsupported allowlist fails and does not persist revision`() = runTest {
         val store = InMemoryConfigStateStore()
         val allowlist = ApplicationAllowlist { _, _ -> ApplicationAllowlistResult(false) }

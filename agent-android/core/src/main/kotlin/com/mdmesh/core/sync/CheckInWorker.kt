@@ -13,6 +13,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.mdmesh.core.config.ConfigApplier
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.util.concurrent.TimeUnit
@@ -27,9 +28,13 @@ class CheckInWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
     private val coordinator: CheckInCoordinator,
+    private val configApplier: ConfigApplier,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result = runCatching {
+        // Treat the persisted policy as an invariant, not as a one-shot command. This also repairs
+        // drift when an OEM drops PACKAGE_ADDED or kills the manifest receiver's process.
+        configApplier.reapplyApplicationAllowlist()
         coordinator.runOnce()
     }.fold(
         onSuccess = { Result.success() },

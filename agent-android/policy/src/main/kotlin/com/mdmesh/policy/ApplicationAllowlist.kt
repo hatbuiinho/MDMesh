@@ -8,13 +8,20 @@ data class ApplicationAllowlistPlan(
 )
 
 object ApplicationAllowlistPlanner {
+    fun shouldHideNewPackage(
+        enabled: Boolean,
+        packageName: String,
+        allowedPackages: Set<String>,
+        protectedPackages: Set<String>,
+    ): Boolean = enabled && packageName !in allowedPackages && packageName !in protectedPackages
+
     fun shouldHidePackage(
         enabled: Boolean,
         packageName: String,
         launchable: Boolean,
         allowedPackages: Set<String>,
         protectedPackages: Set<String>,
-    ): Boolean = enabled && launchable && packageName !in allowedPackages && packageName !in protectedPackages
+    ): Boolean = launchable && shouldHideNewPackage(enabled, packageName, allowedPackages, protectedPackages)
 
     fun plan(
         enabled: Boolean,
