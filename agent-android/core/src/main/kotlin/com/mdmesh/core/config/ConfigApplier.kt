@@ -55,7 +55,7 @@ class ConfigApplier(
         outcomes["applications.allowlist"] = applicationAllowlist.apply(
             doc.applications.enforceAllowlist,
             doc.applications.allowedPackages.toSet(),
-        ).outcome()
+        ).outcome(enforcementRequired = doc.applications.enforceAllowlist)
         doc.location?.let { loc ->
             outcomes["location"] = runCatching { setLocationMode(loc.mode); ConfigOutcome.APPLIED }
                 .getOrElse { ConfigOutcome.failed(it.message ?: "location mode") }

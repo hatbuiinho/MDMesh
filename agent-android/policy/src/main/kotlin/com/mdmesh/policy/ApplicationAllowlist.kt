@@ -47,10 +47,16 @@ data class ApplicationAllowlistResult(
     val restored: Int = 0,
     val skipped: Map<String, String> = emptyMap(),
 ) {
-    fun outcome(): String = when {
+    /**
+     * An enabled allowlist is a security boundary: unsupported or partially-applied enforcement
+     * must keep config.apply open instead of acknowledging a revision the device did not reach.
+     * When the policy is disabled, an unsupported implementation has no restriction to enforce.
+     */
+    fun outcome(enforcementRequired: Boolean = false): String = when {
+        skipped.isNotEmpty() -> "failed: app allowlist incomplete; skipped=${skipped.size}"
+        !supported && enforcementRequired -> "failed: app allowlist requires Device Owner"
         !supported -> "unsupported"
-        skipped.isEmpty() -> "applied: hidden=$hidden, restored=$restored"
-        else -> "applied: hidden=$hidden, restored=$restored, skipped=${skipped.size}"
+        else -> "applied: hidden=$hidden, restored=$restored"
     }
 }
 

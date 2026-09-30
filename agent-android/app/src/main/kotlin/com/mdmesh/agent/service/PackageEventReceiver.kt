@@ -31,11 +31,14 @@ class PackageEventReceiver : BroadcastReceiver() {
                 // the allowlist. Telemetry still records only genuinely new installations above.
                 if (pkg != null) runCatching {
                     configStateStore.load()?.applications?.let { apps ->
-                        applicationAllowlist.applyPackage(
+                        val result = applicationAllowlist.applyPackage(
                             apps.enforceAllowlist,
                             apps.allowedPackages.toSet(),
                             pkg,
                         )
+                        if (!result.supported || result.skipped.isNotEmpty()) {
+                            Log.w(TAG, "allowlist enforcement incomplete for $pkg: $result")
+                        }
                     }
                 }.onFailure { Log.w(TAG, "immediate allowlist enforcement failed for $pkg", it) }
             }

@@ -120,4 +120,37 @@ class ConfigApplierTest {
         assertEquals(setOf("com.acme.pos", "com.android.settings"), packages)
         assertEquals("applied: hidden=2, restored=0", r.outcomes["applications.allowlist"])
     }
+
+    @Test fun `enabled unsupported allowlist fails and does not persist revision`() = runTest {
+        val store = InMemoryConfigStateStore()
+        val allowlist = ApplicationAllowlist { _, _ -> ApplicationAllowlistResult(false) }
+        val r = ConfigApplier(emptyMap(), kiosk(FakeController()), {}, store, allowlist)
+            .apply(ConfigApplyPayload(
+                revision = "apps-unsupported",
+                applications = com.mdmesh.proto.ConfigApplications(true, listOf("com.acme.pos")),
+            ))
+
+        assertEquals("failed: app allowlist requires Device Owner", r.outcomes["applications.allowlist"])
+        assertFalse(ConfigApplier.succeeded(r))
+        assertNull(store.revision())
+    }
+
+    @Test fun `partially applied allowlist fails and does not persist revision`() = runTest {
+        val store = InMemoryConfigStateStore()
+        val allowlist = ApplicationAllowlist { _, _ ->
+            ApplicationAllowlistResult(
+                supported = true,
+                skipped = mapOf("com.example.blocked" to "Android refused to hide the package"),
+            )
+        }
+        val r = ConfigApplier(emptyMap(), kiosk(FakeController()), {}, store, allowlist)
+            .apply(ConfigApplyPayload(
+                revision = "apps-partial",
+                applications = com.mdmesh.proto.ConfigApplications(true, listOf("com.acme.pos")),
+            ))
+
+        assertEquals("failed: app allowlist incomplete; skipped=1", r.outcomes["applications.allowlist"])
+        assertFalse(ConfigApplier.succeeded(r))
+        assertNull(store.revision())
+    }
 }

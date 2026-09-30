@@ -27,11 +27,17 @@ class DeviceOwnerApplicationAllowlist(
         // instead of remaining permanently hidden after the switch is cleared.
         if (!enabled) managed.addAll(hiddenByThisAdminPackages())
         // The pure planner deliberately retains packages already hidden by MDMesh because hidden
-        // apps disappear from launcher queries. Prune packages that really no longer exist here.
+        // apps disappear from launcher queries. Prune packages that really no longer exist, and
+        // discard stale ownership if another actor has made a managed package visible again. The
+        // latter is important: otherwise the planner retains the package forever and never re-hides it.
         managed.removeAll { !isInstalled(it) }
+        if (enabled) managed.removeAll { pkg ->
+            !runCatching { dpm.isApplicationHidden(admin, pkg) }.getOrDefault(false)
+        }
+        val launchable = launchablePackages()
         val plan = ApplicationAllowlistPlanner.plan(
             enabled = enabled,
-            launchablePackages = launchablePackages(),
+            launchablePackages = launchable,
             allowedPackages = allowedPackages,
             protectedPackages = protectedPackages(),
             managedHiddenPackages = managed,
@@ -73,6 +79,22 @@ class DeviceOwnerApplicationAllowlist(
                     }
                 }
                 .onFailure { skipped[pkg] = it.message ?: it.javaClass.simpleName }
+        }
+
+        // Verify the converged state instead of trusting the mutator's return value or our cached
+        // ownership. A successful config revision must mean every launcher-visible disallowed app
+        // is actually hidden and every package being restored is actually visible.
+        if (enabled) {
+            val expectedHidden = (launchable + managed) - allowedPackages - protectedPackages()
+            for (pkg in expectedHidden.sorted()) {
+                val actuallyHidden = runCatching { dpm.isApplicationHidden(admin, pkg) }.getOrDefault(false)
+                if (!actuallyHidden) skipped.putIfAbsent(pkg, "Package remains visible after enforcement")
+            }
+        } else {
+            for (pkg in managed.sorted()) {
+                val stillHidden = runCatching { dpm.isApplicationHidden(admin, pkg) }.getOrDefault(true)
+                if (stillHidden) skipped.putIfAbsent(pkg, "Package remains hidden after restore")
+            }
         }
         prefs.edit().putStringSet(KEY_HIDDEN, managed).apply()
         return ApplicationAllowlistResult(true, hidden, restored, skipped)
