@@ -74,6 +74,8 @@ import com.mdmesh.oem.OemAdapter
 import com.mdmesh.policy.CapabilityRegistry
 import com.mdmesh.policy.ApplicationAllowlist
 import com.mdmesh.policy.DeviceOwnerApplicationAllowlist
+import com.mdmesh.policy.DeviceOwnerPackageSuspensionManager
+import com.mdmesh.policy.PackageSuspensionManager
 import com.mdmesh.policy.TogglePolicy
 import com.mdmesh.policy.wifi.DpmHandle
 import com.mdmesh.remote.RemoteControlTierDetector
@@ -345,17 +347,26 @@ object AgentModule {
 
     @Provides
     @Singleton
+    fun providePackageSuspensionManager(
+        @ApplicationContext context: Context,
+        handle: DpmHandle,
+    ): PackageSuspensionManager = DeviceOwnerPackageSuspensionManager(context, handle.dpm, handle.admin)
+
+    @Provides
+    @Singleton
     fun provideApplicationAllowlist(
         @ApplicationContext context: Context,
         handle: DpmHandle,
-    ): ApplicationAllowlist = DeviceOwnerApplicationAllowlist(context, handle.dpm, handle.admin)
+        suspensionManager: PackageSuspensionManager,
+    ): ApplicationAllowlist = DeviceOwnerApplicationAllowlist(context, handle.dpm, handle.admin, suspensionManager)
 
     @Provides
     @Singleton
     fun provideAppUsageManager(
         @ApplicationContext context: Context,
         handle: DpmHandle,
-    ): AppUsageManager = AndroidAppUsageManager(context, handle.dpm, handle.admin)
+        suspensionManager: PackageSuspensionManager,
+    ): AppUsageManager = AndroidAppUsageManager(context, handle.dpm, suspensionManager)
 
     @Provides
     @Singleton

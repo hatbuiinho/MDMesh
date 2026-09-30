@@ -7,12 +7,13 @@ import android.app.PendingIntent
 import android.app.usage.UsageEvents
 import android.app.admin.DevicePolicyManager
 import android.app.usage.UsageStatsManager
-import android.content.ComponentName
 import android.content.Context
 import android.os.Process
 import android.os.Build
 import android.content.Intent
 import android.content.pm.PackageManager
+import com.mdmesh.policy.PackageSuspensionManager
+import com.mdmesh.policy.SuspensionReason
 import com.mdmesh.proto.*
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.Serializable
@@ -23,7 +24,7 @@ import java.time.*
 class AndroidAppUsageManager(
     private val context: Context,
     private val dpm: DevicePolicyManager,
-    private val admin: ComponentName,
+    private val suspensionManager: PackageSuspensionManager,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : AppUsageManager {
     private val prefs = context.getSharedPreferences("app_usage_policy", Context.MODE_PRIVATE)
@@ -163,7 +164,7 @@ class AndroidAppUsageManager(
     }
     private fun setSuspended(pkg: String, suspended: Boolean): Boolean {
         if (isProtected(pkg)) return !suspended
-        return runCatching { dpm.setPackagesSuspended(admin, arrayOf(pkg), suspended).isEmpty() }.getOrDefault(false)
+        return suspensionManager.setReason(pkg, SuspensionReason.APP_USAGE, suspended)
     }
     private fun isProtected(pkg: String): Boolean {
         if (pkg == context.packageName) return true

@@ -15,14 +15,21 @@ class DeviceOwnerApplicationAllowlist(
     private val context: Context,
     private val dpm: DevicePolicyManager,
     private val admin: ComponentName,
+    private val suspensionManager: PackageSuspensionManager,
 ) : ApplicationAllowlist {
     private val prefs = context.getSharedPreferences("mdm_app_allowlist", Context.MODE_PRIVATE)
 
+    @Synchronized
     override fun apply(enabled: Boolean, allowedPackages: Set<String>): ApplicationAllowlistResult {
         if (!dpm.isDeviceOwnerApp(context.packageName)) return ApplicationAllowlistResult(false)
 
         val managed = prefs.getStringSet(KEY_HIDDEN, emptySet()).orEmpty().toMutableSet()
-        val suspended = prefs.getStringSet(KEY_SUSPENDED, emptySet()).orEmpty().toMutableSet()
+        // One-time migration from the pre-coordinator implementation.
+        prefs.getStringSet(LEGACY_KEY_SUSPENDED, emptySet()).orEmpty().forEach { pkg ->
+            suspensionManager.setReason(pkg, SuspensionReason.APPLICATION_ALLOWLIST, true)
+        }
+        prefs.edit().remove(LEGACY_KEY_SUSPENDED).apply()
+        val suspended = suspensionManager.packagesFor(SuspensionReason.APPLICATION_ALLOWLIST).toMutableSet()
         // Older agents could forget ownership when Android rejected an unhide operation. While the
         // policy is off, recover every package hidden by this device owner so those devices converge
         // instead of remaining permanently hidden after the switch is cleared.
@@ -56,11 +63,10 @@ class DeviceOwnerApplicationAllowlist(
                 suspended.remove(pkg)
                 continue
             }
-            val failure = setSuspended(pkg, false)
-            if (failure == null && !isSuspended(pkg)) {
+            if (suspensionManager.setReason(pkg, SuspensionReason.APPLICATION_ALLOWLIST, false)) {
                 suspended.remove(pkg)
             } else {
-                skipped[pkg] = failure ?: "Package remains suspended after restore"
+                skipped[pkg] = "Package remains suspended after restore"
             }
         }
         var restored = 0
@@ -87,12 +93,10 @@ class DeviceOwnerApplicationAllowlist(
         var hidden = 0
         for (pkg in (desiredSuspended - suspended).sorted()) {
             // Respect suspension owned by another policy/admin; do not claim it for restoration.
-            if (isSuspended(pkg)) continue
-            val failure = setSuspended(pkg, true)
-            if (failure == null && isSuspended(pkg)) {
+            if (suspensionManager.setReason(pkg, SuspensionReason.APPLICATION_ALLOWLIST, true)) {
                 suspended.add(pkg)
             } else {
-                skipped[pkg] = failure ?: "Package remains launchable after suspension"
+                skipped[pkg] = "Package remains launchable after suspension"
             }
         }
         for (pkg in plan.hide.sorted()) {
@@ -119,7 +123,7 @@ class DeviceOwnerApplicationAllowlist(
             for (pkg in expectedHidden.sorted()) {
                 val actuallyHidden = runCatching { dpm.isApplicationHidden(admin, pkg) }.getOrDefault(false)
                 if (!actuallyHidden) skipped.putIfAbsent(pkg, "Package remains visible after enforcement")
-                if (!isSuspended(pkg)) skipped.putIfAbsent(pkg, "Package remains launchable after enforcement")
+                if (!suspensionManager.isSuspended(pkg)) skipped.putIfAbsent(pkg, "Package remains launchable after enforcement")
             }
         } else {
             for (pkg in managed.sorted()) {
@@ -128,10 +132,10 @@ class DeviceOwnerApplicationAllowlist(
             }
         }
         prefs.edit().putStringSet(KEY_HIDDEN, managed).apply()
-        prefs.edit().putStringSet(KEY_SUSPENDED, suspended).apply()
         return ApplicationAllowlistResult(true, hidden, restored, skipped)
     }
 
+    @Synchronized
     override fun applyPackage(
         enabled: Boolean,
         allowedPackages: Set<String>,
@@ -150,15 +154,10 @@ class DeviceOwnerApplicationAllowlist(
             )) return ApplicationAllowlistResult(true)
 
         val managed = prefs.getStringSet(KEY_HIDDEN, emptySet()).orEmpty().toMutableSet()
-        val suspended = prefs.getStringSet(KEY_SUSPENDED, emptySet()).orEmpty().toMutableSet()
         val alreadyHidden = runCatching { dpm.isApplicationHidden(admin, packageName) }.getOrDefault(false)
-        val alreadySuspended = isSuspended(packageName)
         val failures = mutableListOf<String>()
-        if (!alreadySuspended) {
-            val failure = setSuspended(packageName, true)
-            if (failure == null && isSuspended(packageName)) suspended.add(packageName)
-            else failures += failure ?: "Android refused to suspend the package"
-        }
+        if (!suspensionManager.setReason(packageName, SuspensionReason.APPLICATION_ALLOWLIST, true))
+            failures += "Android refused to suspend the package"
         var hiddenCount = 0
         if (!alreadyHidden) {
             runCatching { dpm.setApplicationHidden(admin, packageName, true) }
@@ -172,7 +171,6 @@ class DeviceOwnerApplicationAllowlist(
         }
         prefs.edit()
             .putStringSet(KEY_HIDDEN, managed)
-            .putStringSet(KEY_SUSPENDED, suspended)
             .apply()
         return ApplicationAllowlistResult(
             supported = true,
@@ -221,19 +219,9 @@ class DeviceOwnerApplicationAllowlist(
         }.getOrDefault(false)
     }
 
-    private fun isSuspended(pkg: String): Boolean = runCatching {
-        context.packageManager.isPackageSuspended(pkg)
-    }.getOrDefault(false)
-
-    /** @return null on success, otherwise the platform's refusal/error. */
-    private fun setSuspended(pkg: String, value: Boolean): String? = runCatching {
-        val failed = dpm.setPackagesSuspended(admin, arrayOf(pkg), value)
-        if (failed.isEmpty()) null else "Android refused to ${if (value) "suspend" else "restore"} the package"
-    }.getOrElse { it.message ?: it.javaClass.simpleName }
-
     private companion object {
         const val KEY_HIDDEN = "hidden_by_mdmesh"
-        const val KEY_SUSPENDED = "suspended_by_mdmesh_allowlist"
+        const val LEGACY_KEY_SUSPENDED = "suspended_by_mdmesh_allowlist"
         const val SYSTEM_UI = "com.android.systemui"
     }
 }
