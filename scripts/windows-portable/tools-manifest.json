@@ -1,0 +1,72 @@
+{
+  "packages": [
+    {
+      "name": "Python 3.14.6 embeddable x64",
+      "url": "https://www.python.org/ftp/python/3.14.6/python-3.14.6-embed-amd64.zip",
+      "directory": "python",
+      "archiveDirectory": "",
+      "sha256": "df901e84a896ff1ee720ad03377e0c8d8c2244fda79808aeeaff6316df1cb75c",
+      "files": {
+        "python.exe": "03168c01b7b7491423350e82c26fee71f35b43694d1319d3c668bda6903a0c38",
+        "pythonw.exe": "e3889c5020644b9ecfd9e678f95372b1e127e29e6c02b1129ed88c38381d0972",
+        "python314.dll": "fde89cdb5c2d08ae65de7ef4abca1876c93ba3796002f5ac0bf7e4d4f5a94da0",
+        "python3.dll": "22c6e46d8bd563cdb072650901461ef68be2ea6cb1e80af859559d9395a27e39",
+        "vcruntime140.dll": "052ad6a20d375957e82aa6a3c441ea548d89be0981516ca7eb306e063d5027f4",
+        "vcruntime140_1.dll": "6a99bc0128e0c7d6cbbf615fcc26909565e17d4ca3451b97f8987f9c6acbc6c8",
+        "LICENSE.txt": "935cf13e19f8c31b497d20b05d73623431a226b230c3599bc30fa3348979bc68",
+        "pyexpat.pyd": "133942bde91fe43289076a0b50a01b265df4ead078617cca6f6604a4166e1260",
+        "select.pyd": "fab1b4cee101359d82d72061b83cff1855337b3677b9fe01cd69f7548f4c496e",
+        "unicodedata.pyd": "0d4f124b2d6622d276d777f7106972219f9b310edb5df8149c253da7c013d6d8",
+        "winsound.pyd": "38eccf01b663abfad0bc40444043410fecc5af895be3a1efbc9bd1cfe787f5a6",
+        "_asyncio.pyd": "dc6db118862ab3298e55e0f7c44c2c0dae4af9e810d2578271280202d6aa098a",
+        "_bz2.pyd": "d28c3dd1c22bfb8a6e8a6a9c2359842b797d08e878ecb7805f60e86a45589d11",
+        "_ctypes.pyd": "25d9b0be550d428fecc697ca20450343a7c3ce77c9f5283e9aecfd188d609250",
+        "_decimal.pyd": "8d41a84db20a9b985e98c802ad6833cf9625c744ad35478dd346f54f81488706",
+        "_elementtree.pyd": "16f4d30a50fc25950762a8bbef9dd6c5750729345539c224d489be33e6d6f340",
+        "_hashlib.pyd": "36ce760b9fac53fe51755f30a68d86f5fde89bf1b66c65c19e04aa3afa404ac2",
+        "_lzma.pyd": "5f7003f9f0256e36351ca2810b3485db28579b08e4d1d65f6f211fcd1136f395",
+        "_multiprocessing.pyd": "9e87ce081fbcf0b6596fcba98e121379ad72a33d68e6b2af7a8bcc5b900229ba",
+        "_overlapped.pyd": "ac877f3da413c1523c07b6a0dd1f7e0d7ceb3e8590a5e9e20a78eb1bcb700793",
+        "_queue.pyd": "bb53357b4e91ac23ed4061f15ff3e5e91a5b3be1cbb0c6cf294521ae5b4efa1c",
+        "_remote_debugging.pyd": "38f30e6188450374a993e8fc07e7d41a90842c19290f5c6b46ca10b93c831587",
+        "_socket.pyd": "25ac83cac32ed0d67b2cc9672ce64cb53f0a29a75b14c276e901023ff43da5f9",
+        "_sqlite3.pyd": "b0c4edff6d60f300373ec929ab915f95ee601bf167e04d28e4e9e28a8e536fe0",
+        "_ssl.pyd": "5c07572df2913618cfb851b608cb5f74d740fcce5c3f2e63dc0a2ba39ab35dad",
+        "_uuid.pyd": "a09308efd309732e3745e70b4456235579c450cac32bed616dfb3913b56f6637",
+        "_wmi.pyd": "0ab1fbcf18c95d70343012feb1aad61e1ba95aaed5b4a08e57fc5990e8a9a452",
+        "_zoneinfo.pyd": "c471587b0741aa0b795dcda76667a69e40aeb881b54ea3601a26e050cb27dc8a",
+        "_zstd.pyd": "262aea62a994920daf152a10bdc0ca83a8b1c0874e71db23734862431de182c6",
+        "libcrypto-3.dll": "53c529145339fb042a3dcd3a09c2d7753204f8b4fc79d99e0d31e69a33985958",
+        "libffi-8.dll": "eff52743773eb550fcc6ce3efc37c85724502233b6b002a35496d828bd7b280a",
+        "libssl-3.dll": "b17a87979862d19241edc4318f967e24c3ec356ed6c2368f561179fab2311001",
+        "sqlite3.dll": "2940bee51c4a00c7e8f2a8a1be857d4c4ad23b2657fbf7fdf18e3a3fd20066c6",
+        "python314.zip": "e13e610c2e56173cc933986f38c56c7439e4e1519ddf98829e92c5d348f1c376",
+        "python314._pth": "2ed7ccda80e9e28ab5877902a9a325586c8a7b7b3e6731d944565bee082e216c",
+        "python.cat": "10da2cf78c77c5bf69469bcb652df2eb0af63d7f9ba08ba3cd4512aed6a42525"
+      }
+    },
+    {
+      "name": "Android Platform Tools 37.0.0 Windows",
+      "url": "https://dl.google.com/android/repository/platform-tools_r37.0.0-win.zip",
+      "directory": "platform-tools",
+      "archiveDirectory": "platform-tools",
+      "sha256": "4fe305812db074cea32903a489d061eb4454cbc90a49e8fea677f4b7af764918",
+      "files": {
+        "adb.exe": "957e46b8615f7af5b7292a2ddabe98d2e61940c3fb2b0545756507f080613e71",
+        "AdbWinApi.dll": "120bef587119c6cb926b86b9be90fdfbce38937588eae28cd91a94ce63c7b965",
+        "AdbWinUsbApi.dll": "6ca69a2ca0e31309c087d288f058977d421ad03500e4c3e1dbd981241a069c60",
+        "etc1tool.exe": "6e4f7670d72e999aedc9900acdca373e8e7ae6fff858d19c2c6c005028292e3a",
+        "fastboot.exe": "dd55fef77ab2753b6423f37f39d91cb00ce53ab4539a2431577f07c4abcaa32a",
+        "hprof-conv.exe": "33321e7d44be00a1023d24fe34702df13ed9e5ab9edae219fbd8cde37dd766a9",
+        "libwinpthread-1.dll": "283a8c3f8d1542df333e0899757b00d484888978d62ccf8c99db662a95cce764",
+        "make_f2fs.exe": "4b5f9fdd76a03a16788d3542b5445c70eee27f931d052973a881db420c975f2b",
+        "make_f2fs_casefold.exe": "7878e842693bd1a9321fe5a0b55cfef4ddda3807bac55de38e177f134b29b01b",
+        "mke2fs.conf": "ad58a58dcdd24d85055814ca9cac67db89d4e67c434e96774bdce0d0a007d067",
+        "mke2fs.exe": "be42abb5d1651c8766e230e7af834bd8e0f2085857ccb483463f58ba5ad65e1a",
+        "NOTICE.txt": "628f43e9c88e2bf5aee9fc4c1cb672bf3931ba12dd5ef75c8170678395f3ca23",
+        "source.properties": "fbd87c8567afbc6dc78e140097fcde234f4a61fa7065e85081d43e442ccd3d24",
+        "sqlite3.exe": "413aacb98a96bd5316ff9865765b86bef548e57f7dc8f620ad33f509a64748c3"
+      }
+    }
+  ]
+}

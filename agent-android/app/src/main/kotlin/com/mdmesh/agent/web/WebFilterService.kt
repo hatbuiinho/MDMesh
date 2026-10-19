@@ -8,35 +8,31 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
+import android.system.StructPollfd
 import androidx.core.app.NotificationCompat
-import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
-import java.net.InetAddress
 import java.util.concurrent.Executors
 
 /** DNS-only local VPN: only the virtual DNS address is routed, keeping app traffic on the kernel fast path. */
 class WebFilterService : VpnService() {
-    private var tun: ParcelFileDescriptor? = null
+    @Volatile private var tun: ParcelFileDescriptor? = null
     private val worker = Executors.newSingleThreadExecutor()
     @Volatile private var policy = WebFilterPolicy("OFF", emptySet(), emptySet())
-    @Volatile private var resolver: InetAddress = InetAddress.getByName("1.1.1.1")
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         foreground()
-        policy = WebFilterConfig.load(this)
-        val connectivity = getSystemService(ConnectivityManager::class.java)
-        resolver = connectivity.allNetworks.asSequence()
-            .filter { network ->
-                val capabilities = connectivity.getNetworkCapabilities(network)
-                capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true &&
-                    !capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-            }
-            .mapNotNull { connectivity.getLinkProperties(it)?.dnsServers?.firstOrNull() }
-            .firstOrNull() ?: resolver
-        tun?.close()
+        val updated = WebFilterConfig.load(this)
+        // Always-on VPN and config.apply can start the same service back-to-back.
+        if (updated == policy && tun != null) return START_STICKY
+        policy = updated
+        val previous = tun
         tun = null
+        previous?.close()
         startTunnel()
         return START_STICKY
     }
@@ -47,7 +43,7 @@ class WebFilterService : VpnService() {
             .addDnsServer("10.253.0.2").addRoute("10.253.0.2", 32)
             // The management control-plane must remain reachable even if an administrator enters
             // an overly broad deny rule. Other applications still use the filtered DNS route.
-            .setBlocking(true)
+            .setBlocking(false)
         if (policy.scope == "SELECTED") {
             // A configuration can name an app before it is installed. PackageEventReceiver
             // schedules a config reapply after installation, which rebuilds this VPN route.
@@ -67,12 +63,22 @@ class WebFilterService : VpnService() {
     }
 
     private fun loop(fd: ParcelFileDescriptor) {
-        val input = FileInputStream(fd.fileDescriptor)
         val output = FileOutputStream(fd.fileDescriptor)
         val buffer = ByteArray(1500)
-        while (!Thread.currentThread().isInterrupted) {
+        val poll = StructPollfd().apply {
+            this.fd = fd.fileDescriptor
+            events = OsConstants.POLLIN.toShort()
+        }
+        // A blocking read on a closed TUN can survive on some kernels and prevent
+        // the single worker from ever starting the replacement tunnel's loop.
+        while (!Thread.currentThread().isInterrupted && tun === fd) {
             val size = try {
-                input.read(buffer)
+                if (Os.poll(arrayOf(poll), 250) == 0) continue
+                if (tun !== fd || !fd.fileDescriptor.valid()) break
+                Os.read(fd.fileDescriptor, buffer, 0, buffer.size)
+            } catch (e: ErrnoException) {
+                if (tun === fd && (e.errno == OsConstants.EAGAIN || e.errno == OsConstants.EINTR)) continue
+                break
             } catch (_: Exception) {
                 break
             }
@@ -82,23 +88,43 @@ class WebFilterService : VpnService() {
             val host = readQuestionName(buffer, dnsOffset, size) ?: continue
             val blocked = policy.blocks(host)
             val query = buffer.copyOfRange(dnsOffset, size)
-            val response = if (blocked) nxdomain(query) else upstream(query) ?: continue
-            output.write(ipv4UdpReply(buffer, ihl, response))
+            val response = if (blocked) DnsForwarder.error(query, 3) else upstream(query)
+            if (tun !== fd) break
+            try { output.write(ipv4UdpReply(buffer, ihl, response)) }
+            catch (_: Exception) { break }
         }
     }
 
-    private fun upstream(query: ByteArray): ByteArray? = runCatching {
-        DatagramSocket().use { socket ->
-            protect(socket); socket.soTimeout = 4000
-            socket.send(DatagramPacket(query, query.size, resolver, 53))
-            val reply = ByteArray(4096); val packet = DatagramPacket(reply, reply.size); socket.receive(packet)
-            reply.copyOf(packet.length)
+    private fun upstream(query: ByteArray): ByteArray {
+        // Refresh per query: a Wi-Fi/mobile handover must not retain the old network's DNS.
+        val connectivity = getSystemService(ConnectivityManager::class.java)
+        val active = connectivity.activeNetwork
+        val network = connectivity.allNetworks.filter {
+            val caps = connectivity.getNetworkCapabilities(it)
+            caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true &&
+                !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+        }.sortedBy {
+            when {
+                it == active -> 0
+                connectivity.getNetworkCapabilities(it)
+                    ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true -> 1
+                else -> 2
+            }
+        }.firstOrNull()
+        val servers = network?.let { connectivity.getLinkProperties(it)?.dnsServers }.orEmpty()
+        return DnsForwarder.resolve(query, servers) { resolver, request ->
+            DatagramSocket().use { socket ->
+                check(protect(socket)) { "Could not protect DNS socket" }
+                socket.soTimeout = 1000
+                // Connected UDP accepts replies only from the chosen resolver.
+                socket.connect(resolver, 53)
+                socket.send(DatagramPacket(request, request.size))
+                val reply = ByteArray(4096)
+                val packet = DatagramPacket(reply, reply.size)
+                socket.receive(packet)
+                reply.copyOf(packet.length)
+            }
         }
-    }.getOrNull()
-
-    private fun nxdomain(query: ByteArray): ByteArray = query.copyOf().also {
-        it[2] = ((it[2].toInt() and 0x01) or 0x80).toByte(); it[3] = 0x83.toByte()
-        for (i in 6..11) it[i] = 0
     }
 
     private fun readQuestionName(packet: ByteArray, offset: Int, size: Int): String? {

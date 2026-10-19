@@ -138,6 +138,51 @@ Automatic native builds require an existing keystore. Use `--help` for details.
 
 ### Enroll an ADB Device Owner
 
+From the repository root, prepare a USB-debugging device with:
+
+```bash
+bash scripts/enroll-device-adb.sh
+# Select a device explicitly:
+bash scripts/enroll-device-adb.sh --serial DEVICE_SERIAL
+```
+
+The interactive script defaults to `https://mdm.hatbuinho.me` (or `MDM_BASE_URL`
+from root `.env`). It logs into the API and selects the highest `versionCode`
+for `com.mdmesh.agent` from the server's published release catalog
+(`GET /rest/private/agent/v1/releases`). It downloads that APK over HTTPS to a
+temporary directory and verifies its SHA256 against the catalog before installing.
+The temporary download is removed when the script exits. An empty catalog or
+checksum failure stops enrollment; local build artifacts are not used.
+It lets you choose the connected device, installs the APK, verifies Device Owner,
+grants and verifies Usage Access plus Alarms & reminders (Android 12+), and creates a fresh single-use enrollment token. It fills the server URL/token through the agent UI and submits enrollment,
+then waits up to 60 seconds for the agent to confirm management and connection.
+Keep the device unlocked while the script runs. Initial Device Owner setup requires
+a device without accounts; the script never resets it.
+
+To grant only these two permissions to an already installed agent, without
+logging into the server or enrolling again:
+
+```bash
+bash scripts/enroll-device-adb.sh --permissions-only
+# Or choose a device explicitly:
+bash scripts/enroll-device-adb.sh --permissions-only --serial DEVICE_SERIAL
+```
+
+Put console credentials in the ignored root `.env` (literal values; no shell expansion):
+
+```dotenv
+MDM_BASE_URL=https://mdm.hatbuinho.me/
+MDM_ADMIN_USERNAME=admin
+MDM_ADMIN_PASSWORD='your-console-password'
+```
+
+Exported environment values take precedence. Missing credentials are prompted;
+password input is hidden. Credentials and tokens are not printed or saved in logs.
+Use `--env-file PATH` for another dotenv file, or `--base-url URL` to change servers.
+The API account needs `edit_devices`; RSA login and two-factor flows are not
+supported. Tokens use the server's default new-device configuration. No APK rebuild
+is required for this helper (the enrollment UI is available in release 1026).
+
 For a device already set as Device Owner with ADB, install an agent build that has
 the **ADB enrollment** section on its status screen. Open the web console's
 **Enroll → Token** tab and generate a fresh, single-use token. On the device, open
@@ -234,3 +279,32 @@ and two-factor flows are not supported by this helper.
 
 Publication adds the APK to **Agent releases & rollout**. Start a rollout in the console
 to update devices. This command does not change the enrollment APK URL or rebuild the web image.
+
+### Windows portable ADB enrollment
+
+The portable distribution runs on Windows 10/11 x64 without installing Python,
+Android Studio or modifying PATH. Extract the whole ZIP and double-click
+`Enroll.cmd`. It uses the published server APK and the same API enrollment flow
+as the shell helper. `Grant-Permissions.cmd` only grants Usage Access and
+Alarms & reminders. Tools are pinned by SHA256 and included in the full bundle;
+`Setup.cmd` verifies/restores them from official Python/Google HTTPS downloads.
+Some phones require the manufacturer's Windows USB driver.
+
+Build the folder and ZIP on macOS, Linux or Windows with Python 3.10+:
+
+```bash
+python3 scripts/build-windows-enroll-portable.py
+# Copy only console URL/username/password from the project's .env:
+python3 scripts/build-windows-enroll-portable.py --env-file .env --include-credentials
+# Small bootstrap bundle: tools are downloaded on first launch in Windows:
+python3 scripts/build-windows-enroll-portable.py --without-tools --output releases/portable-bootstrap
+```
+
+Output defaults to `releases/portable-windows/MDMesh-Enroll/` and
+`releases/portable-windows/MDMesh-Enroll-Windows.zip`, plus `SHA256SUMS`.
+Existing outputs are not overwritten; choose another `--output` directory for a
+new bundle. Without `--include-credentials`, the password is blank and prompted
+on use. Database/SMTP/signing settings are never copied. Tool cache location can
+be selected with `--cache PATH`. Source launchers and download pins live under
+`scripts/windows-portable/`. PowerShell 5.1 downloads tools only when required;
+no pip packages are needed. Enrollment still requires internet access to MDMesh.
