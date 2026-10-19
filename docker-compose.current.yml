@@ -1,0 +1,17 @@
+# Current local source, applied after external + agent overlays.
+services:
+  server:
+    image: mdmesh-server:${LOCAL_BUILD_TAG:-web-app-scope-20261017}
+  caddy:
+    image: mdmesh-web:${WEB_BUILD_TAG:-play-search-vi-20261018}
+    environment:
+      MDM_SERVER_UPSTREAM: mdmesh-server-internal:8080
+    build:
+      args:
+        VITE_APP_VERSION: ${WEB_BUILD_TAG:-play-search-vi-20261018}
+  supervisor:
+    environment:
+      APPLY_SUPPORTED: "0"
+      AUTO_UPDATE: "0"
+      SERVER_BASE: http://mdmesh-server-internal:8080
+      HEALTH_URL: http://mdmesh-server-internal:8080/rest/public/name

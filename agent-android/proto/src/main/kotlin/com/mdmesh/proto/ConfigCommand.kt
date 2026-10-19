@@ -28,6 +28,8 @@ data class ConfigApplyPayload(
 data class WebAccessPolicy(
     val mode: String = "OFF",
     val domains: List<String> = emptyList(),
+    val scope: String = "ALL",
+    val packages: List<String> = emptyList(),
 )
 
 @Serializable
@@ -35,6 +37,7 @@ data class AppUsagePolicy(
     val timezone: String = "UTC",
     val rules: List<AppUsageRule> = emptyList(),
     val overrides: List<AppUsageGrant> = emptyList(),
+    val schedules: List<AppRestSchedule> = emptyList(),
 )
 
 @Serializable
@@ -86,3 +89,18 @@ object ConfigOutcome {
     fun failed(reason: String): String = "failed: $reason"
     fun isFailed(outcome: String): Boolean = outcome.startsWith("failed")
 }
+
+/** Days belong to the start of a window, including windows ending the next day. */
+@Serializable
+data class AppRestSchedule(
+    val id: String,
+    val name: String,
+    val enabled: Boolean = true,
+    val scope: String = "ALL",
+    val packages: List<String> = emptyList(),
+    val exceptions: List<String> = emptyList(),
+    val days: List<Int> = emptyList(),
+    val from: String,
+    val to: String,
+    val warningMinutes: Int = 5,
+)

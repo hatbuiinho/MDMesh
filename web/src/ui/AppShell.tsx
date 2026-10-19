@@ -2,8 +2,6 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { useTheme } from './theme';
-import { UpdateBanner } from '../components/UpdateBanner';
-import { ReloadPrompt } from '../components/ReloadPrompt';
 import { preloadRoute } from './routePrefetch';
 import {
   IconDashboard,
@@ -142,7 +140,7 @@ export function AppShell({
           <span style={{ fontWeight: 600 }}>{title ?? 'MDMesh'}</span>
         </div>
         <main id="main-content" className="content-scroll" tabIndex={-1}>
-          <div className="content route-enter"><ReloadPrompt /><UpdateBanner />{children}</div>
+          <div className="content route-enter">{children}</div>
         </main>
       </div>
     </div>

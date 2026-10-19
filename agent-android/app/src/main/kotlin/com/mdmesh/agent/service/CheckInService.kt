@@ -94,11 +94,19 @@ class CheckInService : LifecycleService() {
         ContextCompat.registerReceiver(this, powerReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
     }
 
+    @javax.inject.Inject lateinit var appUsage: com.mdmesh.core.usage.AppUsageManager
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         startAsForeground()
         if (!started) {
             started = true
+            lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                while (true) {
+                    runCatching { appUsage.evaluateAndReport() }.onFailure { Log.w(TAG, "Local app policy evaluation failed", it) }
+                    delay(30_000L)
+                }
+            }
             graceUntil = System.currentTimeMillis() + REACHABILITY_GRACE_MS
             lifecycleScope.launch {
                 delay(REACHABILITY_GRACE_MS + 1_000L)

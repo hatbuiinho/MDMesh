@@ -11,4 +11,6 @@ import java.util.List;
 public class DesiredWebAccess {
     private String mode;
     private List<String> domains;
+    private String scope;
+    private List<String> packages;
 }

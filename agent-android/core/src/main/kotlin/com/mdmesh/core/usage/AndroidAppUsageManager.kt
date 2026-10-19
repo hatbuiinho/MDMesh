@@ -26,82 +26,108 @@ class AndroidAppUsageManager(
     private val dpm: DevicePolicyManager,
     private val suspensionManager: PackageSuspensionManager,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val onEvaluated: (AppUsagePolicy?, Long) -> Unit = { _, _ -> },
 ) : AppUsageManager {
     private val prefs = context.getSharedPreferences("app_usage_policy", Context.MODE_PRIVATE)
     private val reportPrefs = context.getSharedPreferences("app_usage_report", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
+    override fun currentPolicy(): AppUsagePolicy? = load()
+    override fun blockedReason(packageName: String): String? = prefs.getString("blocked:$packageName", null)
+
+    @Synchronized
     override fun apply(policy: AppUsagePolicy?): String {
-        if (policy == null) {
-            val old = load()
-            old?.rules?.forEach { setSuspended(it.packageName, false) }
-            prefs.edit().clear().apply()
-            return "applied"
+        if (!prefs.contains("managed")) {
+            prefs.edit().putStringSet("managed", load()?.rules.orEmpty().map { it.packageName }.toSet()).commit()
         }
-        val previous = load()
-        previous?.rules?.filter { old -> policy.rules.none { it.packageName == old.packageName } }
-            ?.forEach { setSuspended(it.packageName, false) }
-        prefs.edit().putString(KEY_POLICY, json.encodeToString(policy)).apply()
-        if (!dpm.isDeviceOwnerApp(context.packageName) || !hasUsageAccess()) return "unsupported"
-        return runCatching { evaluateAndReport(); "applied" }.getOrElse { "failed: ${it.message ?: "usage evaluation"}" }
+        if (policy == null) prefs.edit().remove(KEY_POLICY).commit()
+        else prefs.edit().putString(KEY_POLICY, json.encodeToString(policy)).commit()
+        return runCatching {
+            evaluateAndReport()
+            if (policy != null && !dpm.isDeviceOwnerApp(context.packageName)) "unsupported"
+            else if (prefs.getBoolean("enforcement_failed", false)) "failed: some packages could not be updated"
+            else "applied"
+        }.getOrElse { "failed: ${it.message ?: "usage evaluation"}" }
     }
 
+    @Synchronized
     override fun evaluateAndReport(): List<AppUsageDailyReport> {
         val policy = load()
-        val now = clock()
-        val zone = runCatching { ZoneId.of(policy?.timezone ?: ZoneId.systemDefault().id) }.getOrDefault(ZoneOffset.UTC)
-        if (!hasUsageAccess()) return policy?.rules.orEmpty().map { AppUsageDailyReport(it.packageName, today(policy!!).toString(), 0, status = "usage_access_missing") }
-        val instant = Instant.ofEpochMilli(now); val date = instant.atZone(zone).toLocalDate()
-        val usage = updateUsage(now, zone)
+        val now = clock(); val instant = Instant.ofEpochMilli(now)
+        val zone = policy?.let(RestScheduleEngine::zone) ?: ZoneOffset.UTC
+        val date = instant.atZone(zone).toLocalDate().toString()
+        val access = hasUsageAccess()
+        val usage = if (access) updateUsage(now, zone) else emptyMap()
         val rules = policy?.rules.orEmpty().filter { it.enabled }.associateBy { it.packageName }
-        val reports = usage.entries.map { (key, used) ->
-            val split = key.indexOf('|')
-            val usageDate = key.substring(0, split)
-            val packageName = key.substring(split + 1)
-            val rule = rules[packageName]
-            if (rule == null) {
-                return@map AppUsageDailyReport(packageName, usageDate, used, status = "observed")
+        val active = policy?.let { RestScheduleEngine.active(it, instant) }.orEmpty()
+        val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val launchable = context.packageManager.queryIntentActivities(launcherIntent, 0).map { it.activityInfo.packageName }
+        val managed = prefs.getStringSet("managed", null)?.toSet() ?: policy?.rules.orEmpty().map { it.packageName }.toSet()
+        val targets = (rules.keys + active.flatMap { if (it.schedule.scope == "ALL") launchable else it.schedule.packages } + managed).toSet()
+        val nextManaged = mutableSetOf<String>()
+        val currentReports = mutableListOf<AppUsageDailyReport>()
+        var failed = false
+        for (pkg in targets) {
+            val rule = rules[pkg]
+            val used = usage["$date|$pkg"] ?: 0L
+            val decision = RestScheduleEngine.decision(policy, pkg, instant, used, access)
+            val limit = decision.limitMs
+            val reached = decision.reached
+            val outside = decision.outside
+            val rests = decision.rests
+            val mustBlock = decision.blocked
+            val protected = isProtected(pkg)
+            val reason = when {
+                reached -> "Đã hết thời gian sử dụng hôm nay."
+                rests.isNotEmpty() || outside -> {
+                    val until = policy?.let { RestScheduleEngine.availableAt(it, pkg, instant) }
+                    val label = rests.joinToString(", ") { it.schedule.name }.ifEmpty { "Ngoài giờ được phép" }
+                    label + if (until != null) " · Có thể dùng lại: " + until.atZone(zone).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM")) else " · Chưa có giờ mở lại trong tuần."
+                }
+                else -> null
             }
-            if (usageDate != date.toString()) {
-                val reachedAt = prefs.getLong("reached:$usageDate:$packageName", 0).takeIf { it > 0 }
-                return@map AppUsageDailyReport(packageName, usageDate, used, reachedAt,
-                    if (reachedAt != null) "limit_reached" else "allowed")
+            // Own every suspension we assert until a successful release, including failed attempts.
+            if (mustBlock && !protected) nextManaged.add(pkg)
+            val installed = runCatching { context.packageManager.getApplicationInfo(pkg, 0) }.isSuccess
+            val needsChange = installed && ((mustBlock && !protected) || pkg in managed)
+            if (!installed) nextManaged.remove(pkg)
+            // Journal ownership before the OS call so a process death cannot orphan a suspension.
+            if (needsChange && mustBlock && !protected) prefs.edit().putStringSet("managed", managed + nextManaged).commit()
+            val applied = !needsChange || setSuspended(pkg, mustBlock && !protected)
+            if (!applied) { failed = true; nextManaged.add(pkg) }
+            prefs.edit().apply {
+                if (reason != null && !protected && installed) putString("blocked:$pkg", reason)
+                else if (!applied) putString("blocked:$pkg", "Chưa thể mở lại ứng dụng. Vui lòng liên hệ quản trị viên.")
+                else remove("blocked:$pkg")
+            }.apply()
+            if (!reached && access && limit != null && used < limit && limit - used <= (rule?.warningMinutes ?: 0) * 60_000L) {
+                runCatching { warn(pkg, (limit - used) / 60_000L) }
             }
-            val grant = policy!!.overrides.filter { it.packageName == rule.packageName && it.expiresAt > now }.sumOf { it.extraMinutes }
-            val outside = rule.allowedWindows.isNotEmpty() && rule.allowedWindows.none { inWindow(it, instant.atZone(zone)) }
-            val limit = rule.dailyLimitMinutes?.plus(grant)?.times(60_000L)
-            val reached = limit != null && used >= limit
-            if (!reached && limit != null && limit - used <= rule.warningMinutes * 60_000L) warn(rule.packageName, (limit - used).coerceAtLeast(0) / 60_000L)
-            val status = when { outside -> "outside_schedule"; reached -> "limit_reached"; else -> "allowed" }
-            val suspend = outside || reached
-            val applied = setSuspended(rule.packageName, suspend)
-            val markerKey = "reached:${date}:${rule.packageName}"
-            if (reached && !prefs.contains(markerKey)) prefs.edit().putLong(markerKey, now).apply()
-            if (!reached) prefs.edit().remove(markerKey).apply()
-            AppUsageDailyReport(rule.packageName, usageDate, used,
-                prefs.getLong(markerKey, 0).takeIf { it > 0 }, if (applied) status else "enforcement_failed")
+            val marker = "reached:$date:$pkg"
+            if (reached && !prefs.contains(marker)) prefs.edit().putLong(marker, now).apply()
+            val status = when {
+                !applied -> "enforcement_failed"
+                mustBlock && protected -> "protected_app"
+                rests.isNotEmpty() -> "rest_schedule"
+                outside -> "outside_schedule"
+                reached -> "limit_reached"
+                !access && limit != null -> "usage_access_missing"
+                else -> "allowed"
+            }
+            currentReports.add(AppUsageDailyReport(pkg, date, used, prefs.getLong(marker, 0).takeIf { it > 0 }, status))
         }
-        // Keep policy apps visible even before their first foreground event.
-        val seenToday = reports.asSequence().filter { it.usageDate == date.toString() }.map { it.packageName }.toSet()
-        val emptyPolicyRows = rules.values.filter { it.packageName !in seenToday }.map {
-            AppUsageDailyReport(it.packageName, date.toString(), 0, status = "allowed")
+        prefs.edit().putStringSet("managed", nextManaged).putBoolean("enforcement_failed", failed).commit()
+        // Local scheduling/notifications run regardless of network and Usage Access permission.
+        onEvaluated(policy, now)
+        val seen = currentReports.map { it.packageName }.toSet()
+        val observed = usage.mapNotNull { (key, used) ->
+            val day = key.substringBefore('|'); val pkg = key.substringAfter('|')
+            if (day == date && pkg in seen) null else AppUsageDailyReport(pkg, day, used, status = "observed")
         }
-        // The server bounds check-ins to 200 usage rows. Prioritize configured apps, then the
-        // most-used packages, while retaining yesterday so the final total survives midnight.
-        return (reports + emptyPolicyRows).sortedWith(
-            compareByDescending<AppUsageDailyReport> { it.packageName in rules }
-                .thenByDescending { it.usageDate }
-                .thenByDescending { it.foregroundMs }
-        ).take(MAX_REPORT_ROWS)
+        return (currentReports + observed).sortedWith(compareByDescending<AppUsageDailyReport> { it.packageName in rules || it.status == "rest_schedule" }
+            .thenByDescending { it.usageDate }.thenByDescending { it.foregroundMs }).take(MAX_REPORT_ROWS)
     }
 
-    private fun inWindow(w: AppUsageWindow, now: ZonedDateTime): Boolean {
-        if (now.dayOfWeek.value !in w.days) return false
-        val from = runCatching { LocalTime.parse(w.from) }.getOrNull() ?: return false
-        val to = runCatching { LocalTime.parse(w.to) }.getOrNull() ?: return false
-        val time = now.toLocalTime()
-        return if (from <= to) time >= from && time < to else time >= from || time < to
-    }
     /** Incremental event fold. The cursor, totals and open sessions are committed together, so a
      * failed network request can safely resend the same idempotent daily totals without rescanning. */
     private fun updateUsage(end: Long, zone: ZoneId): Map<String, Long> {
@@ -170,7 +196,9 @@ class AndroidAppUsageManager(
         if (pkg == context.packageName) return true
         val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
         val launcher = context.packageManager.resolveActivity(home, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
-        return pkg == launcher
+        if (pkg == launcher || pkg == "android" || pkg == "com.android.systemui") return true
+        val dialer = context.getSystemService(android.telecom.TelecomManager::class.java)?.defaultDialerPackage
+        return pkg == dialer || dpm.activeAdmins.orEmpty().any { it.packageName == pkg }
     }
     private fun hasUsageAccess(): Boolean {
         val ops = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager

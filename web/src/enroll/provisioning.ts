@@ -36,11 +36,22 @@ export interface WifiConfig {
   security?: WifiSecurity;
 }
 
+function packageChecksum(sha256: string): string {
+  if (!/^[0-9a-f]{64}$/i.test(sha256)) throw new Error('Invalid agent release SHA-256');
+  const bytes = sha256.match(/../g)!.map((pair) => String.fromCharCode(parseInt(pair, 16))).join('');
+  return btoa(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 /** The provisioning JSON a fresh device scans (6-tap → QR scanner). Pass `wifi` to pre-connect it. */
 export function buildProvisioningPayload(token: string, wifi?: WifiConfig, release?: AgentRelease): string {
   const payload: Record<string, unknown> = {
     'android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME': release ? `${release.packageName}/com.mdmesh.agent.admin.AdminReceiver` : ADMIN_COMPONENT,
-    'android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM': release?.signatureChecksum ?? SIGNATURE_CHECKSUM,
+    // Bind catalog QR codes to the exact APK bytes. Samsung's Device Owner QR guidance uses
+    // the package checksum; keep the signing checksum for the configured default APK, whose
+    // bytes may change at the same URL without rebuilding the console.
+    ...(release
+      ? { 'android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_CHECKSUM': packageChecksum(release.sha256) }
+      : { 'android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM': SIGNATURE_CHECKSUM }),
     'android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION': release?.url ?? agentApkUrl(),
     'android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE': {
       'com.mdmesh.ENROLL_TOKEN': token,

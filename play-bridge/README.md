@@ -23,6 +23,7 @@ Optional environment:
 
 - `PLAY_DEVICE_ARCH=arm64`
 - `PLAY_DEVICE_LOCALE=en-US`
+- `PLAY_SEARCH_LOCALE=vi-VN` (language used for Play search results; independent of APK delivery locale)
 - `PLAY_MAX_ARTIFACT_BYTES=524288000`
 
 The claimed dispenser key and bridge cache are stored in `/data`. No bridge

@@ -366,7 +366,14 @@ object AgentModule {
         @ApplicationContext context: Context,
         handle: DpmHandle,
         suspensionManager: PackageSuspensionManager,
-    ): AppUsageManager = AndroidAppUsageManager(context, handle.dpm, suspensionManager)
+    ): AppUsageManager = AndroidAppUsageManager(
+        context,
+        handle.dpm,
+        suspensionManager,
+        onEvaluated = { policy, now ->
+            com.mdmesh.agent.usage.RestScheduleRuntime.reconcile(context, policy, now)
+        },
+    )
 
     @Provides
     @Singleton

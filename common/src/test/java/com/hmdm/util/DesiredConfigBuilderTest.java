@@ -17,6 +17,19 @@ import static org.junit.Assert.*;
 
 public class DesiredConfigBuilderTest {
 
+    @Test
+    public void web_filter_scope_selects_and_sorts_valid_packages() {
+        Configuration c = new Configuration();
+        c.setId(42);
+        c.setWebAccessMode("BLOCKLIST");
+        c.setWebAccessDomains("example.com");
+        c.setWebAccessScope("SELECTED");
+        c.setWebAccessPackages("com.z.browser, com.a.browser\ninvalid com.a.browser");
+        DesiredWebAccess policy = DesiredConfigBuilder.build(c, Collections.emptyList()).getWebAccess();
+        assertEquals("SELECTED", policy.getScope());
+        assertEquals(Arrays.asList("com.a.browser", "com.z.browser"), policy.getPackages());
+    }
+
     /** Application ids and version ids are deliberately distinct: mainAppId is an applicationVersions.id. */
     private static Application app(int id, int versionId, String pkg, int action) {
         Application a = new Application(); a.setId(id); a.setUsedVersionId(versionId); a.setPkg(pkg); a.setAction(action); return a;
@@ -123,6 +136,15 @@ public class DesiredConfigBuilderTest {
         d.setWebAccess(new DesiredWebAccess());
         assertEquals("device.configApply&app.appAllowlist&app.usageLimit&device.webFilter",
                 DesiredConfigBuilder.requiredCapability(d));
+    }
+
+    @Test
+    public void rest_schedule_requires_new_agent_capability() {
+        DesiredConfig d = DesiredConfigBuilder.build(kioskConfig(), Collections.emptyList());
+        DesiredAppUsage usage = new DesiredAppUsage();
+        usage.getSchedules().add(new com.hmdm.rest.json.agent.AppRestSchedule());
+        d.setAppUsage(usage);
+        assertEquals("device.configApply&app.usageLimit&app.restSchedule", DesiredConfigBuilder.requiredCapability(d));
     }
 
     @Test

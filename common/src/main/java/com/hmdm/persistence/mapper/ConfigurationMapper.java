@@ -116,6 +116,8 @@ public interface ConfigurationMapper {
             "appAllowlistPackages=#{appAllowlistPackages}, " +
             "webAccessMode=#{webAccessMode}, " +
             "webAccessDomains=#{webAccessDomains}, " +
+            "webAccessScope=#{webAccessScope}, " +
+            "webAccessPackages=#{webAccessPackages}, " +
             "wifiSSID=#{wifiSSID}, " +
             "wifiPassword=#{wifiPassword}, " +
             "wifiSecurityType=#{wifiSecurityType}, " +

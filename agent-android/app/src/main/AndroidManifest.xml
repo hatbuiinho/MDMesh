@@ -10,6 +10,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
     <!-- Minimal permission set. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -56,6 +58,17 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MdmAgent"
         tools:targetApi="35">
+
+        <activity android:name=".usage.RestScheduleActivity" android:exported="false" android:lockTaskMode="if_whitelisted" />
+        <receiver android:name=".usage.RestScheduleReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
         <!-- App-drawer status screen (real managed state). Not HOME — the kiosk launcher owns HOME. -->
         <activity

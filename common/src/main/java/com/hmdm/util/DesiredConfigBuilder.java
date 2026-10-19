@@ -75,6 +75,16 @@ public final class DesiredConfigBuilder {
             }
         }
         value.setDomains(new ArrayList<String>(domains));
+        boolean selected = "SELECTED".equalsIgnoreCase(cfg.getWebAccessScope());
+        value.setScope(selected ? "SELECTED" : "ALL");
+        Set<String> packages = new TreeSet<String>();
+        if (selected && cfg.getWebAccessPackages() != null) {
+            for (String raw : cfg.getWebAccessPackages().split("[,\\s]+")) {
+                String pkg = raw.trim();
+                if (pkg.matches("^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)+$")) packages.add(pkg);
+            }
+        }
+        value.setPackages(new ArrayList<String>(packages));
         return value;
     }
 
@@ -202,6 +212,7 @@ public final class DesiredConfigBuilder {
             required.add(APP_ALLOWLIST_CAPABILITY);
         }
         if (doc != null && doc.getAppUsage() != null) required.add(APP_USAGE_CAPABILITY);
+        if (doc != null && doc.getAppUsage() != null && doc.getAppUsage().getSchedules() != null && !doc.getAppUsage().getSchedules().isEmpty()) required.add("app.restSchedule");
         if (doc != null && doc.getWebAccess() != null) required.add(WEB_ACCESS_CAPABILITY);
         return String.join("&", required);
     }

@@ -27,6 +27,7 @@ class MdmApplication : Application(), Configuration.Provider {
         super.onCreate()
         CheckInWorker.schedule(this)   // periodic reconcile (WorkManager floor)
         CheckInWorker.scheduleNow(this) // prompt check-in on every cold start (post-install/reboot)
+        com.mdmesh.agent.usage.RestScheduleWorker.schedule(this)
         WakeKeepAlive.schedule(this)   // doze-proof reconcile heartbeat
     }
 }

@@ -20,13 +20,17 @@ class AndroidWebAccessManager(
     override suspend fun apply(policy: WebAccessPolicy?): String = runCatching {
         check(dpm.isDeviceOwnerApp(context.packageName)) { "device owner required" }
         val protectedHost = runCatching { URI(serverConfig.baseUrl()).host }.getOrNull()
+        require(policy == null || policy.mode == "OFF" || policy.mode == "ALLOWLIST" || policy.mode == "BLOCKLIST") { "invalid mode" }
+        require(policy == null || policy.mode != "ALLOWLIST" || policy.domains.isNotEmpty()) { "empty allowlist" }
+        require(policy == null || policy.scope == "ALL" || policy.scope == "SELECTED") { "invalid web filter scope" }
+        if (policy != null && policy.mode != "OFF" && policy.scope == "SELECTED") {
+            require(policy.packages.isNotEmpty()) { "no selected apps" }
+        }
         WebFilterConfig.save(context, policy, protectedHost)
         if (policy == null || policy.mode == "OFF") {
             dpm.setAlwaysOnVpnPackage(admin, null, false)
             context.stopService(Intent(context, WebFilterService::class.java))
         } else {
-            require(policy.mode == "ALLOWLIST" || policy.mode == "BLOCKLIST") { "invalid mode" }
-            require(policy.mode != "ALLOWLIST" || policy.domains.isNotEmpty()) { "empty allowlist" }
             // DNS-only split tunnel keeps application traffic on Android's kernel path; lockdown would
             // incorrectly block traffic outside the single routed DNS address.
             dpm.setAlwaysOnVpnPackage(admin, context.packageName, false)
@@ -45,6 +49,8 @@ internal object WebFilterConfig {
             .putString("mode", policy?.mode ?: "OFF")
             .putStringSet("domains", domains)
             .putStringSet("protectedDomains", protected)
+            .putString("scope", policy?.scope ?: "ALL")
+            .putStringSet("packages", policy?.packages?.toSet() ?: emptySet())
             .apply()
     }
     fun load(context: Context): WebFilterPolicy {
@@ -53,6 +59,8 @@ internal object WebFilterConfig {
             p.getString("mode", "OFF") ?: "OFF",
             p.getStringSet("domains", emptySet()) ?: emptySet(),
             p.getStringSet("protectedDomains", emptySet()) ?: emptySet(),
+            p.getString("scope", "ALL") ?: "ALL",
+            p.getStringSet("packages", emptySet()) ?: emptySet(),
         )
     }
 
@@ -64,6 +72,8 @@ internal data class WebFilterPolicy(
     val mode: String,
     val domains: Set<String>,
     val protectedDomains: Set<String>,
+    val scope: String = "ALL",
+    val packages: Set<String> = emptySet(),
 ) {
     private val matcher = DomainMatcher(domains)
     private val protectedMatcher = DomainMatcher(protectedDomains)

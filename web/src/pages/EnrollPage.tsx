@@ -217,11 +217,14 @@ export function EnrollPage() {
                     </button>
                   </div>
                   <p className="note">
-                    Single-use token{expiresAt ? `, expires ${fmtDateTime(expiresAt)}` : ''}. For headless
-                    or scripted provisioning — embed it as{' '}
-                    <span className="mono">com.mdmesh.ENROLL_TOKEN</span> (with{' '}
-                    <span className="mono">com.mdmesh.SERVER_URL</span>). The QR is the usual path.
+                    Single-use token{expiresAt ? `, expires ${fmtDateTime(expiresAt)}` : ''}. For ADB
+                    Device Owner setup, open MDMesh Agent on the device and enter this token and the server URL
+                    in its ADB enrollment section. An older agent without that section must be updated first.
+                    For scripted provisioning, pass it as{' '}
+                    <span className="mono">com.mdmesh.ENROLL_TOKEN</span> with{' '}
+                    <span className="mono">com.mdmesh.SERVER_URL</span>.
                   </p>
+                  <p className="note">Server URL: <span className="mono">{serverBaseUrl()}</span></p>
                 </>
               ) : (
                 <p className="note">For headless or scripted provisioning. For the usual flow, scan the QR.</p>

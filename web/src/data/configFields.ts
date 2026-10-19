@@ -88,6 +88,10 @@ export const CONFIG_FIELDS: FieldDef[] = [
     { value: 'OFF', label: 'Not managed' }, { value: 'ALLOWLIST', label: 'Only listed domains' }, { value: 'BLOCKLIST', label: 'Block listed domains' },
   ] },
   { key: 'webAccessDomains', label: 'Web domains', type: 'textarea', group: 'Network', focused: true, enforced: true, help: 'One domain per line. A domain also matches its subdomains; do not include https:// or paths.' },
+  { key: 'webAccessScope', label: 'Apply web filter to', type: 'enum', group: 'Network', focused: true, enforced: true, help: 'Choose whether the domain policy applies to every app or only selected packages.', options: [
+    { value: 'ALL', label: 'All apps' }, { value: 'SELECTED', label: 'Selected apps' },
+  ] },
+  { key: 'webAccessPackages', label: 'Filtered apps', type: 'textarea', group: 'Network', focused: true, enforced: true, help: 'Choose Android apps from App Library or search Play Store. Only these apps use the domain policy.' },
 
   // ── Security ───────────────────────────────────────────────────────────-─
   { key: 'password', label: 'Admin password', type: 'password', group: 'Security', enforced: true, help: 'Kiosk exit password (stored as entered).' },
@@ -164,5 +168,5 @@ export const KIOSK_AFFECTING_KEYS: ReadonlySet<string> = new Set([
   'kioskMode', 'mainAppId', 'kioskExit', 'kioskHome', 'kioskRecents', 'kioskNotifications', 'kioskSystemInfo',
   'kioskKeyguard', 'kioskLockButtons', 'password', 'backgroundColor', 'textColor', 'iconSize',
   'applications', 'appAllowlist', 'appAllowlistPackages',
-  'webAccessMode', 'webAccessDomains',
+  'webAccessMode', 'webAccessDomains', 'webAccessScope', 'webAccessPackages',
 ]);

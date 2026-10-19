@@ -35,18 +35,33 @@ class WebFilterService : VpnService() {
             }
             .mapNotNull { connectivity.getLinkProperties(it)?.dnsServers?.firstOrNull() }
             .firstOrNull() ?: resolver
-        if (tun == null) startTunnel()
+        tun?.close()
+        tun = null
+        startTunnel()
         return START_STICKY
     }
 
     private fun startTunnel() {
-        tun = Builder().setSession("MDMesh Web Filter")
+        val builder = Builder().setSession("MDMesh Web Filter")
             .setMtu(1500).addAddress("10.253.0.1", 30)
             .addDnsServer("10.253.0.2").addRoute("10.253.0.2", 32)
             // The management control-plane must remain reachable even if an administrator enters
             // an overly broad deny rule. Other applications still use the filtered DNS route.
-            .addDisallowedApplication(packageName)
-            .setBlocking(true).establish()
+            .setBlocking(true)
+        if (policy.scope == "SELECTED") {
+            // A configuration can name an app before it is installed. PackageEventReceiver
+            // schedules a config reapply after installation, which rebuilds this VPN route.
+            var installed = 0
+            policy.packages.forEach { pkg ->
+                try { builder.addAllowedApplication(pkg); installed++ }
+                catch (_: android.content.pm.PackageManager.NameNotFoundException) { /* wait for install */ }
+            }
+            // An empty allowlist would make the VPN apply to every app on Android.
+            if (installed == 0) return
+        } else {
+            builder.addDisallowedApplication(packageName)
+        }
+        tun = builder.establish()
         val descriptor = tun ?: return
         worker.execute { loop(descriptor) }
     }

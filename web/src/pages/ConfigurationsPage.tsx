@@ -23,6 +23,7 @@ import { SyncBar } from '../components/SyncBar';
 import { KioskChangeConfirm, kioskAffectingChanges } from '../components/KioskChangeConfirm';
 import { Modal } from '../ui/Modal';
 import { AppUsagePolicyEditor } from '../components/AppUsagePolicyEditor';
+import { WebFilterAppSelector, webFilterPackages } from '../components/WebFilterAppSelector';
 
 // The seeded device-template defaults are locked: view-only, and used as bases
 // for new configs (start from scratch or from one of these).
@@ -454,6 +455,13 @@ function ConfigEditor({
       toast.push('err', 'Allowed domain required', 'Add at least one domain before enabling the web allowlist.');
       return;
     }
+    if (webMode !== 'OFF' && draft.webAccessScope === 'SELECTED') {
+      const packages = webFilterPackages(draft.webAccessPackages);
+      if (packages.length === 0 || packages.some((pkg) => !/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$/.test(pkg))) {
+        toast.push('err', 'Apps required', 'Select at least one Android app from the Library.');
+        return;
+      }
+    }
     const invalidDomain = webDomains.find((raw) => {
       const domain = raw.toLowerCase().replace(/^\*\./, '');
       return domain.includes('://') || domain.includes('/') || !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(domain);
@@ -564,7 +572,11 @@ function ConfigEditor({
       {enforcedByGroup.filter(({ group }) => group === activeSection).map(({ group, fields }) => (
         <section className="panel cfg-panel" key={group}>
           <div className="cfg-sec-h">{group}</div>
-          {fields.filter((f) => f.key !== 'webAccessDomains' || draft.webAccessMode !== 'OFF').map((f) => (
+          {fields.filter((f) => {
+            if (f.key === 'webAccessDomains' || f.key === 'webAccessScope') return draft.webAccessMode !== 'OFF';
+            if (f.key === 'webAccessPackages') return draft.webAccessMode !== 'OFF' && draft.webAccessScope === 'SELECTED';
+            return true;
+          }).map((f) => (
             <Field key={f.key} def={f} value={draft[f.key]} apps={apps} assigned={allowed} disabled={readOnly} onChange={(v) => set(f.key, v)} />
           ))}
         </section>
@@ -607,7 +619,7 @@ function ConfigEditor({
       {activeSection === 'App usage' && <section className="panel cfg-panel">
         <div className="cfg-sec-h">App usage limits</div>
         <p className="note">Daily quotas and allowed time windows are enforced locally, including while devices are offline.</p>
-        <AppUsagePolicyEditor configurationId={initial.id} apps={allowed} readOnly={readOnly} />
+        <AppUsagePolicyEditor configurationId={initial.id} apps={allowed} libraryApps={apps} readOnly={readOnly} />
       </section>}
 
       {activeSection === 'Legacy fields' && <><button className="cfg-adv-toggle" onClick={() => setAdvanced((v) => !v)}>
@@ -672,6 +684,9 @@ function Field({
 }
 
 function FieldControl({ def, value, apps, assigned, disabled, onChange }: { def: FieldDef; value: unknown; apps: Application[]; assigned: ConfigApp[]; disabled?: boolean; onChange: (v: unknown) => void }) {
+  if (def.key === 'webAccessPackages') {
+    return <WebFilterAppSelector apps={apps} value={value} disabled={disabled} onChange={onChange} />;
+  }
   switch (def.type) {
     case 'switch':
       return (

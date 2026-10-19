@@ -38,6 +38,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.zip.GZIPInputStream;
 
 @Api(tags = {"F-Droid"}, authorizations = {@Authorization("Bearer Token")})
 @Singleton
@@ -56,6 +58,8 @@ public class FDroidResource {
 
     private volatile List<FDroidApp> cache = null;
     private volatile long fetchedAt = 0L;
+    private volatile long retryAfter = 0L;
+    private final AtomicBoolean refreshing = new AtomicBoolean();
 
     public FDroidResource() {
     }
@@ -102,14 +106,42 @@ public class FDroidResource {
         if (local != null && (System.currentTimeMillis() - fetchedAt) < TTL_MILLIS) {
             return local;
         }
+        // Keep searches responsive while an expired catalogue refreshes. Only one
+        // refresh runs at a time; failures retain the last usable catalogue.
+        if (local != null) {
+            if (System.currentTimeMillis() >= retryAfter && refreshing.compareAndSet(false, true)) {
+                Thread refresh = new Thread(() -> {
+                    try {
+                        cache = fetchCatalogue();
+                        fetchedAt = System.currentTimeMillis();
+                    } catch (Exception e) {
+                        retryAfter = System.currentTimeMillis() + 60000L;
+                        logger.warn("Failed to refresh F-Droid catalogue; retaining cached apps", e);
+                    } finally {
+                        refreshing.set(false);
+                    }
+                }, "fdroid-catalogue-refresh");
+                refresh.setDaemon(true);
+                refresh.start();
+            }
+            return local;
+        }
         synchronized (this) {
-            if (cache != null && (System.currentTimeMillis() - fetchedAt) < TTL_MILLIS) {
+            if (cache != null) {
                 return cache;
             }
+            if (System.currentTimeMillis() < retryAfter) {
+                throw new IllegalStateException("F-Droid catalogue fetch is backing off after a failure");
+            }
+            try {
             List<FDroidApp> fresh = fetchCatalogue();
             cache = fresh;
             fetchedAt = System.currentTimeMillis();
             return fresh;
+            } catch (Exception e) {
+                retryAfter = System.currentTimeMillis() + 60000L;
+                throw e;
+            }
         }
     }
 
@@ -122,9 +154,12 @@ public class FDroidResource {
         conn.setConnectTimeout(15000);
         conn.setReadTimeout(120000);
         conn.setRequestProperty("User-Agent", "MDMesh");
+        conn.setRequestProperty("Accept-Encoding", "gzip");
 
         JsonFactory factory = mapper.getFactory();
-        try (InputStream in = conn.getInputStream();
+        try (InputStream raw = conn.getInputStream();
+             InputStream in = "gzip".equalsIgnoreCase(conn.getContentEncoding())
+                     ? new GZIPInputStream(raw) : raw;
              JsonParser parser = factory.createParser(in)) {
             parser.setCodec(mapper);
 
@@ -142,6 +177,9 @@ public class FDroidResource {
             }
         }
 
+        if (apps.isEmpty()) {
+            throw new IllegalStateException("F-Droid index contained no installable apps");
+        }
         apps.sort(Comparator.comparing(a -> a.name == null ? "" : a.name.toLowerCase(Locale.ROOT)));
         logger.info("F-Droid catalogue parsed: {} apps", apps.size());
         return apps;

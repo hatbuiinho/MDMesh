@@ -95,13 +95,36 @@ public class AppUsageResource {
         return Response.OK();
     }
 
+    static String validateWindow(List<Integer> days, String from, String to) {
+        try {
+            if(from==null || to==null || !from.matches("[0-9]{2}:[0-9]{2}") || !to.matches("[0-9]{2}:[0-9]{2}")) return "Window time must use HH:mm.";
+            if(LocalTime.parse(from).equals(LocalTime.parse(to))) return "Window start and end must differ.";
+        } catch(Exception e) { return "Window time must use HH:mm."; }
+        if(days==null || days.isEmpty() || days.stream().anyMatch(d->d==null||d<1||d>7) || new HashSet<Integer>(days).size()!=days.size()) return "Window days must be unique values 1-7.";
+        return null;
+    }
+
     private boolean canAccess(int id) {
         return SecurityContext.get().hasPermission("configurations") && configurations.hasConfigurationAccess(id);
     }
     private Integer customer() { return SecurityContext.get().getCurrentCustomerId().orElse(null); }
-    private String validate(DesiredAppUsage body) {
+    static String validate(DesiredAppUsage body) {
         if (body==null) return "Policy is required.";
         try { ZoneId.of(body.getTimezone()); } catch(Exception e) { return "Invalid IANA timezone."; }
+        if (body.getSchedules()==null || body.getSchedules().size()>50) return "Provide at most 50 rest schedules.";
+        Set<String> ids=new HashSet<String>();
+        for (AppRestSchedule s:body.getSchedules()) {
+            if(s==null || s.getId()==null || s.getId().length()>80 || s.getId().trim().isEmpty() || !ids.add(s.getId())) return "Each schedule needs a unique id.";
+            if(s.getName()==null || s.getName().trim().isEmpty() || s.getName().length()>120) return "Schedule name is required (max 120 characters).";
+            String windowError=validateWindow(s.getDays(), s.getFrom(), s.getTo());
+            if(windowError!=null) return windowError;
+            if(!"ALL".equals(s.getScope()) && !"SELECTED".equals(s.getScope())) return "Invalid schedule scope.";
+            if(s.getPackages()==null || s.getExceptions()==null || s.getPackages().size()>500 || s.getExceptions().size()>500) return "Invalid schedule app list.";
+            for(String pkg:s.getPackages()) if(pkg==null || !PKG.matcher(pkg).matches()) return "Invalid schedule package.";
+            for(String pkg:s.getExceptions()) if(pkg==null || !PKG.matcher(pkg).matches()) return "Invalid exception package.";
+            if("SELECTED".equals(s.getScope()) && s.getPackages().isEmpty()) return "Select at least one app.";
+            if(s.getWarningMinutes()<0 || s.getWarningMinutes()>60) return "Schedule warning must be 0-60 minutes.";
+        }
         Set<String> packages=new HashSet<String>();
         if (body.getRules()==null) return null;
         for (AppUsageRule r:body.getRules()) {
@@ -111,8 +134,9 @@ public class AppUsageResource {
             if (r.getWarningMinutes()!=null && (r.getWarningMinutes()<0 || r.getWarningMinutes()>120)) return "Warning must be 0-120 minutes.";
             if (!"suspend".equals(r.getAction())) return "Only the suspend action is supported.";
             if (r.getAllowedWindows()!=null) for(AppUsageWindow w:r.getAllowedWindows()) {
-                try { LocalTime.parse(w.getFrom()); LocalTime.parse(w.getTo()); } catch(Exception e) { return "Window time must use HH:mm."; }
-                if (w.getDays()==null || w.getDays().isEmpty() || w.getDays().stream().anyMatch(d->d<1||d>7)) return "Window days must be 1-7.";
+                if (w==null) return "Window is required.";
+                String error=validateWindow(w.getDays(), w.getFrom(), w.getTo());
+                if(error!=null) return error;
             }
         }
         return null;

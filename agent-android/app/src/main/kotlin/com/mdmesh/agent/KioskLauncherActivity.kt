@@ -53,6 +53,7 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class KioskLauncherActivity : ComponentActivity() {
 
+    @Inject lateinit var appUsage: com.mdmesh.core.usage.AppUsageManager
     @Inject lateinit var store: KioskStateStore
     @Inject lateinit var controller: KioskController
     @Inject lateinit var events: EventSink
@@ -67,6 +68,26 @@ class KioskLauncherActivity : ComponentActivity() {
         // the user never opens the status screen.
         ContextCompat.startForegroundService(this, Intent(this, CheckInService::class.java))
         setContentView(idleView())
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                var signature = ""
+                var previouslyBlocked = false
+                while (true) {
+                    val p = active
+                    val next = com.mdmesh.agent.usage.RestScheduleActivity.summary(this@KioskLauncherActivity, appUsage) +
+                        p?.allowedPackages.orEmpty().joinToString { appUsage.blockedReason(it).orEmpty() }
+                    val blocked = p?.pinPackage?.let { appUsage.blockedReason(it) } != null
+                    if (signature != next) {
+                        signature = next
+                        if (p != null && (p.mode != "single" || blocked)) setContentView(launcherGrid(p))
+                        else if (p != null && previouslyBlocked) launchPinned(p)
+                        else if (p == null) setContentView(idleView())
+                    }
+                    previouslyBlocked = blocked
+                    kotlinx.coroutines.delay(5_000)
+                }
+            }
+        }
         // React to kiosk.enter/kiosk.exit live: those run in the check-in service, not here, so we
         // observe the persisted state and re-render (enter → grid/pin, exit → unpin + idle) without
         // waiting for the user to touch the screen.
@@ -86,7 +107,7 @@ class KioskLauncherActivity : ComponentActivity() {
         // Some Android/OEM builds leave lock-task mode when the screen is locked. The persisted
         // kiosk state is still active, so re-assert it whenever HOME resumes after unlock.
         startLockTaskSafely()
-        if (p.mode == "single") {
+        if (p.mode == "single" && p.pinPackage?.let { appUsage.blockedReason(it) } == null) {
             crashGuard.registerFault()
             if (bailOnCrashLoop()) return
             launchPinned(p)
@@ -111,6 +132,9 @@ class KioskLauncherActivity : ComponentActivity() {
 
     /** Launch + show the pinned app (single mode), with a themed splash behind it. */
     private fun launchPinned(p: KioskApplyPayload) {
+        if (p.pinPackage?.let { appUsage.blockedReason(it) } != null) {
+            setContentView(launcherGrid(p)); return
+        }
         val intent = p.pinPackage?.let { packageManager.getLaunchIntentForPackage(it) }
         if (intent == null) {
             setContentView(launcherGrid(p)) // unknown package → fall back to the grid
@@ -233,6 +257,7 @@ class KioskLauncherActivity : ComponentActivity() {
             layoutParams = ViewGroup.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
         column.addView(text("MDMesh Kiosk", 20f, fg, bold = true))
+        column.addView(com.mdmesh.agent.usage.RestScheduleActivity.card(this, appUsage))
         if (rendered == 0) {
             column.addView(
                 text(
@@ -273,13 +298,20 @@ class KioskLauncherActivity : ComponentActivity() {
             },
         )
         addView(
-            text(label, 12f, fg).apply {
+            text((if (appUsage.blockedReason(pkg) != null) "🔒 " else "") + label, 12f, fg).apply {
                 gravity = Gravity.CENTER
                 maxLines = 1
                 setPadding(0, dp(6), 0, 0)
             },
         )
         setOnClickListener {
+            val reason = appUsage.blockedReason(pkg)
+            if (reason != null) {
+                AlertDialog.Builder(this@KioskLauncherActivity).setTitle("Ứng dụng đang tạm dừng").setMessage(reason)
+                    .setPositiveButton("Xem lịch") { _, _ -> startActivity(Intent(this@KioskLauncherActivity, com.mdmesh.agent.usage.RestScheduleActivity::class.java)) }
+                    .setNegativeButton("Đóng", null).show()
+                return@setOnClickListener
+            }
             runCatching {
                 packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it) }
             }
@@ -294,6 +326,7 @@ class KioskLauncherActivity : ComponentActivity() {
         }
         col.addView(centeredText("MDMesh", 28f, SIGNAL, bold = true))
         col.addView(centeredText("Managed device", 14f, MUTED))
+        col.addView(com.mdmesh.agent.usage.RestScheduleActivity.card(this@KioskLauncherActivity, appUsage))
         addView(col)
     }
 

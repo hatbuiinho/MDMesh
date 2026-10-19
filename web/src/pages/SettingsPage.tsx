@@ -6,9 +6,8 @@ import { useTheme } from '../ui/theme';
 import { listConfigurations, type ConfigurationSummary } from '../api/configurations';
 import { API_BASE } from '../api/client';
 import { fetchAuthOptions } from '../api/auth';
-import { getUpdateStatus, setAutoUpdate, checkForUpdates, applyUpdate, type UpdateStatus } from '../api/updates';
 import { RolloutPanel } from '../components/RolloutPanel';
-import { orDash, fmtRelative } from '../ui/format';
+import { orDash } from '../ui/format';
 
 const APP_VERSION = '0.1.0';
 const DEFAULT_CONFIG_KEY = 'mdmesh-default-config';
@@ -21,12 +20,6 @@ export function SettingsPage() {
   const { theme, setTheme, density, setDensity } = useTheme();
   const [configList, setConfigList] = useState<ConfigurationSummary[]>([]);
   const [conn, setConn] = useState<Conn>('checking');
-  const [upd, setUpd] = useState<UpdateStatus | null>(null);
-  const [autoSaving, setAutoSaving] = useState(false);
-  const [autoErr, setAutoErr] = useState<string | null>(null);
-  const [checking, setChecking] = useState(false);
-  const [applying, setApplying] = useState(false);
-  const [updMsg, setUpdMsg] = useState<string | null>(null);
   const [defaultConfig, setDefaultConfig] = useState<string>(() => {
     try {
       return localStorage.getItem(DEFAULT_CONFIG_KEY) ?? '';
@@ -46,53 +39,10 @@ export function SettingsPage() {
           setConfigList([...list].sort((a, b) => a.name.localeCompare(b.name)));
       })
       .catch(() => undefined);
-    getUpdateStatus()
-      .then((x) => !cancelled && setUpd(x))
-      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
   }, []);
-
-  const checkNow = async () => {
-    setChecking(true);
-    setUpdMsg(null);
-    const x = await checkForUpdates();
-    setChecking(false);
-    if (x) setUpd(x);
-    else setUpdMsg('Could not check for updates.');
-  };
-
-  const applyNow = async () => {
-    if (
-      !window.confirm(
-        `Update to v${upd?.latest}?\n\nThe server restarts briefly. The database is backed up first `
-          + 'and the update rolls back automatically if it fails.',
-      )
-    )
-      return;
-    setApplying(true);
-    setUpdMsg(null);
-    const r = await applyUpdate();
-    setApplying(false);
-    if (!r.ok) setUpdMsg(r.error || 'Failed to start update.');
-    else setUpdMsg('Update started — watch the banner at the top for live progress.');
-  };
-
-  const scrollToRollout = () =>
-    document.getElementById('rollout-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-  const toggleAuto = async (next: boolean) => {
-    setAutoSaving(true);
-    setAutoErr(null);
-    const r = await setAutoUpdate(next);
-    setAutoSaving(false);
-    if (!r.ok) {
-      setAutoErr(r.error || 'Could not save');
-      return;
-    }
-    setUpd((p) => (p ? { ...p, auto: next } : p));
-  };
 
   useEffect(() => {
     try {
@@ -166,129 +116,6 @@ export function SettingsPage() {
             <span className="v mono">MDMesh {APP_VERSION}</span>
           </div>
         </section>
-
-        {/* Updates */}
-        {upd && (
-          <section className="panel">
-            <div className="panel-head">
-              <h2 className="panel-title">Server & console updates</h2>
-            </div>
-            <div className="set-row">
-              <span className="k">Running version</span>
-              <span className="v mono">{orDash(upd.current)}</span>
-            </div>
-            <div className="set-row">
-              <span className="k">Latest available</span>
-              <span className="v mono">
-                {orDash(upd.latest)}
-                {upd.latest && upd.verified ? ' ✓' : ''}
-                {upd.channel ? ` (${upd.channel})` : ''}
-              </span>
-            </div>
-            {upd.updateAvailable && upd.release?.notes && (
-              <div className="set-row">
-                <span className="k">
-                  What&rsquo;s new
-                  <small>Release notes for v{orDash(upd.latest)}.</small>
-                </span>
-                <span className="v">
-                  <div className="whatsnew">{upd.release.notes}</div>
-                  {upd.release.url && (
-                    <a className="whatsnew-link" href={upd.release.url} target="_blank" rel="noreferrer">
-                      Full release notes ↗
-                    </a>
-                  )}
-                </span>
-              </div>
-            )}
-            {upd.updateAvailable && (
-              <div className="set-row">
-                <span className="k">
-                  Apply this release
-                  <small>
-                    {upd.applySupported === false
-                      ? 'Update the server and console using your deployment configuration.'
-                      : 'Update the server and console. Manage device APKs in Agent releases below.'}
-                  </small>
-                </span>
-                <span className="v">
-                  <div className="upd-actions">
-                    {upd.applySupported !== false && (
-                      <button
-                        className="btn btn-sm btn-primary"
-                        onClick={() => void applyNow()}
-                        disabled={applying || !upd.verified}
-                      >
-                        {applying ? 'Starting…' : 'Update server + console'}
-                      </button>
-                    )}
-                    <button className="btn btn-sm" onClick={scrollToRollout}>
-                      Manage agent releases ↓
-                    </button>
-                  </div>
-                  {upd.applySupported === false && (
-                    <p className="au-note">
-                      This deployment was installed from source — update the server/console with the
-                      command for your install. Docker (from source): <span className="mono">git pull && ./setup.sh</span> · Native:{' '}
-                      <span className="mono">git pull && sudo ./install/install-native.sh</span>
-                    </p>
-                  )}
-                  {!upd.verified && (
-                    <p className="au-note" style={{ color: 'var(--err)' }}>
-                      Release signature not verified — apply is disabled.
-                    </p>
-                  )}
-                </span>
-              </div>
-            )}
-            <div className="set-row">
-              <span className="k">
-                Check for updates
-                <small>
-                  {upd.checkedAt ? `Last checked ${fmtRelative(upd.checkedAt)}.` : 'Not checked yet.'}
-                </small>
-                {updMsg && <p className="au-note">{updMsg}</p>}
-              </span>
-              <span className="v">
-                <button className="btn btn-sm" onClick={() => void checkNow()} disabled={checking}>
-                  {checking ? 'Checking…' : 'Check now'}
-                </button>
-              </span>
-            </div>
-            {upd.applySupported !== false && (
-            <div className="set-row auto-update-row">
-              <span className="k">
-                Automatic server updates
-                <small>Apply verified releases without a prompt.</small>
-                <p className="au-note">
-                  When on, the updater applies each verified release on its own — backing up the
-                  database first and rolling back automatically if it fails. Leave off to review and
-                  click Update each time.
-                </p>
-                {autoErr && <p className="au-note" style={{ color: 'var(--err)' }}>{autoErr}</p>}
-              </span>
-              <span className="v">
-                <span className="seg">
-                  <button
-                    className={upd.auto ? 'on' : ''}
-                    onClick={() => void toggleAuto(true)}
-                    disabled={autoSaving}
-                  >
-                    On
-                  </button>
-                  <button
-                    className={!upd.auto ? 'on' : ''}
-                    onClick={() => void toggleAuto(false)}
-                    disabled={autoSaving}
-                  >
-                    Off
-                  </button>
-                </span>
-              </span>
-            </div>
-            )}
-          </section>
-        )}
 
         {/* Staged agent-APK rollout (renders itself only when there's an apk to roll out or an active rollout) */}
         <div id="rollout-anchor">

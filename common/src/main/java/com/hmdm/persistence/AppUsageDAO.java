@@ -18,9 +18,14 @@ public class AppUsageDAO {
 
     public DesiredAppUsage desired(int configurationId) {
         List<AppUsagePolicyRow> rows = mapper.policies(configurationId);
-        if (rows.isEmpty()) return null;
+        AppUsageSettings settings = mapper.settings(configurationId);
+        if (rows.isEmpty() && settings == null) return null;
         DesiredAppUsage out = new DesiredAppUsage();
-        out.setTimezone(rows.get(0).getTimezone());
+        out.setTimezone(settings == null ? rows.get(0).getTimezone() : settings.getTimezone());
+        if (settings != null) {
+            try { out.setSchedules(JSON.readValue(settings.getSchedules(), new TypeReference<List<AppRestSchedule>>(){})); }
+            catch (Exception e) { throw new IllegalStateException("Invalid saved rest schedules", e); }
+        }
         for (AppUsagePolicyRow row : rows) {
             AppUsageRule r = new AppUsageRule();
             r.setId(row.getId()); r.setPackageName(row.getPackageName()); r.setDailyLimitMinutes(row.getDailyLimitMinutes());
@@ -46,6 +51,12 @@ public class AppUsageDAO {
 
     @Transactional
     public void replace(int configurationId, DesiredAppUsage desired) {
+        if (desired == null) throw new IllegalArgumentException("Policy is required");
+        AppUsageSettings settings = new AppUsageSettings();
+        settings.setConfigurationId(configurationId); settings.setTimezone(desired.getTimezone());
+        try { settings.setSchedules(JSON.writeValueAsString(desired.getSchedules())); }
+        catch (Exception e) { throw new IllegalArgumentException(e); }
+        mapper.saveSettings(settings);
         mapper.deletePolicies(configurationId);
         if (desired == null || desired.getRules() == null) return;
         for (AppUsageRule r : desired.getRules()) {

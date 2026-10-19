@@ -5,7 +5,11 @@ export interface AppUsageRule {
   id?: number; packageName: string; dailyLimitMinutes?: number; warningMinutes: number;
   action: 'suspend'; enabled: boolean; allowedWindows: AppUsageWindow[];
 }
-export interface AppUsagePolicy { timezone: string; rules: AppUsageRule[] }
+export interface AppRestSchedule {
+  id: string; name: string; enabled: boolean; scope: 'ALL' | 'SELECTED';
+  packages: string[]; exceptions: string[]; days: number[]; from: string; to: string; warningMinutes: number;
+}
+export interface AppUsagePolicy { timezone: string; rules: AppUsageRule[]; schedules?: AppRestSchedule[] }
 export interface AppUsageReport {
   deviceNumber: string; packageName: string; usageDate: string; foregroundMs: number;
   limitReachedAt?: number; status?: string; updatedAt?: number;

@@ -210,9 +210,17 @@ class CheckInCoordinatorTest {
         runCatching { coordinator.runOnce() }
         assertEquals("network down", syncStatus.lastError.value?.message)
         assertNotNull(syncStatus.lastError.value?.atMillis)
+        assertNull(syncStatus.lastSuccessAt.value)
 
         api.checkInThrows = null
         coordinator.runOnce()
         assertNull(syncStatus.lastError.value)
+        val lastSuccess = syncStatus.lastSuccessAt.value
+        assertNotNull(lastSuccess)
+
+        api.checkInThrows = IOException("offline again")
+        runCatching { coordinator.runOnce() }
+        assertEquals("offline again", syncStatus.lastError.value?.message)
+        assertEquals(lastSuccess, syncStatus.lastSuccessAt.value)
     }
 }

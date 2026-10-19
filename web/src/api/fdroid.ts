@@ -18,9 +18,29 @@ export interface FDroidApp {
   size?: number | null;
 }
 
-export async function searchFdroid(q: string, limit = 50): Promise<FDroidApp[]> {
+const searches = new Map<string, { expiresAt: number; result: Promise<FDroidApp[]> }>();
+const SEARCH_TTL_MS = 5 * 60 * 1000;
+const MAX_CACHED_SEARCHES = 100;
+
+export function searchFdroid(q: string, limit = 50): Promise<FDroidApp[]> {
   const params = new URLSearchParams();
-  if (q.trim()) params.set('q', q.trim());
+  if (q.trim()) params.set('q', q.trim().toLowerCase());
   params.set('limit', String(limit));
-  return apiClient.get<FDroidApp[]>(`/private/fdroid/search?${params.toString()}`);
+  const key = params.toString();
+  const cached = searches.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.result;
+
+  const entry = {
+    expiresAt: Date.now() + SEARCH_TTL_MS,
+    result: apiClient.get<FDroidApp[]>(`/private/fdroid/search?${key}`),
+  };
+  searches.delete(key);
+  searches.set(key, entry);
+  if (searches.size > MAX_CACHED_SEARCHES) searches.delete(searches.keys().next().value!);
+  entry.result.then(() => {
+    entry.expiresAt = Date.now() + SEARCH_TTL_MS;
+  }, () => {
+    if (searches.get(key) === entry) searches.delete(key);
+  });
+  return entry.result;
 }

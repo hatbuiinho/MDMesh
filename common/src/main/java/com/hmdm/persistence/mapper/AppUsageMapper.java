@@ -7,6 +7,13 @@ import org.apache.ibatis.annotations.*;
 import java.util.List;
 
 public interface AppUsageMapper {
+    @Select("SELECT * FROM appUsageSettings WHERE configurationId=#{id}")
+    com.hmdm.persistence.domain.AppUsageSettings settings(@Param("id") int id);
+
+    @Insert("INSERT INTO appUsageSettings(configurationId, timezone, schedules) VALUES(#{configurationId},#{timezone},#{schedules}) " +
+            "ON CONFLICT(configurationId) DO UPDATE SET timezone=EXCLUDED.timezone,schedules=EXCLUDED.schedules")
+    void saveSettings(com.hmdm.persistence.domain.AppUsageSettings settings);
+
     @Select("SELECT * FROM appUsagePolicy WHERE configurationId=#{id} ORDER BY packageName")
     List<AppUsagePolicyRow> policies(@Param("id") int configurationId);
 

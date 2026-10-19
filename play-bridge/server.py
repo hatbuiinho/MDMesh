@@ -20,7 +20,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import httpx
-from gplaydl.api import get_delivery, get_details, purchase, search_apps
+from gplaydl.api import get_delivery, get_details, purchase
+from gplaydl import api as play_api
 from gplaydl.auth import ensure_auth
 
 DATA = Path(os.getenv("PLAY_BRIDGE_DATA", "/data"))
@@ -29,10 +30,53 @@ DISPENSER = os.getenv("GPLAYDL_DISPENSER_URL", "http://play-dispenser:8080").rst
 DISPENSER_KEY_FILE = DATA / "dispenser-api-key"
 ARCH = os.getenv("PLAY_DEVICE_ARCH", "arm64")
 LOCALE = os.getenv("PLAY_DEVICE_LOCALE", "en-US")
+SEARCH_LOCALE = os.getenv("PLAY_SEARCH_LOCALE", "vi-VN")
 MAX_BYTES = int(os.getenv("PLAY_MAX_ARTIFACT_BYTES", str(500 * 1024 * 1024)))
 PACKAGE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$")
 locks: dict[str, threading.Lock] = {}
 locks_guard = threading.Lock()
+
+
+def package_from_query(query: str) -> str | None:
+    if PACKAGE.fullmatch(query):
+        return query
+    parsed = urllib.parse.urlparse(query)
+    if parsed.scheme not in ("http", "https") or parsed.hostname not in ("play.google.com", "market.android.com"):
+        return None
+    if parsed.path != "/store/apps/details":
+        return None
+    package = urllib.parse.parse_qs(parsed.query).get("id", [""])[0]
+    return package if PACKAGE.fullmatch(package) else None
+
+
+def search_play(query: str, token: dict, limit: int) -> list[dict]:
+    package = package_from_query(query)
+    if package:
+        try:
+            details = get_details(package, token)
+        except play_api.AppNotAvailableError:
+            return []
+        return [{"package": details.package, "title": details.title or package,
+                 "creator": details.developer or ""}]
+
+    # gplaydl's pinned search helper interpolates raw queries and hard-codes en-US.
+    # Keep its parser but send encoded parameters and the configured search locale.
+    headers = play_api._proto_headers(token)
+    headers["Accept-Language"] = SEARCH_LOCALE
+    headers["X-DFE-UserLanguages"] = SEARCH_LOCALE.replace("-", "_")
+    response = httpx.get(play_api.SEARCH_URL, params={"q": query, "c": 3}, headers=headers, timeout=30)
+    if response.status_code != 200:
+        raise play_api.PlayAPIError(f"Search failed (HTTP {response.status_code})")
+    seen: set[str] = set()
+    results: list[dict] = []
+    for row in play_api._find_docv2(response.content):
+        package = row["package"]
+        if PACKAGE.fullmatch(package) and package not in seen:
+            seen.add(package)
+            results.append(row)
+            if len(results) >= limit:
+                break
+    return results
 
 
 def package_lock(package: str) -> threading.Lock:
@@ -187,7 +231,7 @@ class Handler(BaseHTTPRequestHandler):
                 limit = min(60, max(1, int(urllib.parse.parse_qs(parsed.query).get("limit", [30])[0])))
                 if len(query) < 2:
                     return self.json(400, {"error": "query_too_short"})
-                rows = search_apps(query, auth(), limit)
+                rows = search_play(query, auth(), limit)
                 return self.json(200, [{"packageName": row["package"], "name": row["title"],
                                         "summary": row.get("creator", ""), "paid": False,
                                         "compatible": True} for row in rows])

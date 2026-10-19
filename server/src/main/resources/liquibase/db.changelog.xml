@@ -2955,6 +2955,17 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="26.10.17-web-access-scope" author="mdmesh" context="common">
+        <sql>
+            ALTER TABLE configurations ADD COLUMN webAccessScope VARCHAR(16) NOT NULL DEFAULT 'ALL';
+            ALTER TABLE configurations ADD COLUMN webAccessPackages TEXT;
+        </sql>
+        <rollback>
+            ALTER TABLE configurations DROP COLUMN webAccessPackages;
+            ALTER TABLE configurations DROP COLUMN webAccessScope;
+        </rollback>
+    </changeSet>
+
     <changeSet id="26.09.29-config-apply-single-open" author="mdmesh" context="common">
         <comment>Guarantee one open config.apply per device; retire duplicates left by racing check-ins.</comment>
         <sql>
@@ -2972,4 +2983,15 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="26.10.17-app-rest-schedules" author="mdmesh" context="common">
+        <comment>Shared offline rest schedules and timezone, including configurations without per-app limits.</comment>
+        <sql>
+            CREATE TABLE appUsageSettings (
+                configurationId INTEGER PRIMARY KEY REFERENCES configurations(id) ON DELETE CASCADE,
+                timezone VARCHAR(128) NOT NULL,
+                schedules TEXT NOT NULL DEFAULT '[]'
+            );
+        </sql>
+        <rollback>DROP TABLE appUsageSettings;</rollback>
+    </changeSet>
 </databaseChangeLog>

@@ -148,6 +148,10 @@ public class Configuration implements CustomerData, Serializable {
     private String webAccessMode = "OFF";
     @ApiModelProperty("Allowed or blocked domain names, separated by commas or whitespace")
     private String webAccessDomains;
+    @ApiModelProperty("Web filter scope: ALL or SELECTED")
+    private String webAccessScope = "ALL";
+    @ApiModelProperty("Package IDs filtered when scope is SELECTED, separated by commas or whitespace")
+    private String webAccessPackages;
     @ApiModelProperty("A package ID for content application")
     private Integer contentAppId;
     @ApiModelProperty("WiFi SSID for provisioning")
@@ -440,6 +444,10 @@ public class Configuration implements CustomerData, Serializable {
     public void setWebAccessMode(String webAccessMode) { this.webAccessMode = webAccessMode; }
     public String getWebAccessDomains() { return webAccessDomains; }
     public void setWebAccessDomains(String webAccessDomains) { this.webAccessDomains = webAccessDomains; }
+    public String getWebAccessScope() { return webAccessScope; }
+    public void setWebAccessScope(String webAccessScope) { this.webAccessScope = webAccessScope; }
+    public String getWebAccessPackages() { return webAccessPackages; }
+    public void setWebAccessPackages(String webAccessPackages) { this.webAccessPackages = webAccessPackages; }
 
     public String getQrCodeKey() {
         return qrCodeKey;
@@ -925,6 +933,10 @@ public class Configuration implements CustomerData, Serializable {
         copy.setKioskMode(isKioskMode());
         copy.setAppAllowlist(isAppAllowlist());
         copy.setAppAllowlistPackages(getAppAllowlistPackages());
+        copy.setWebAccessMode(getWebAccessMode());
+        copy.setWebAccessDomains(getWebAccessDomains());
+        copy.setWebAccessScope(getWebAccessScope());
+        copy.setWebAccessPackages(getWebAccessPackages());
         copy.setWifiSSID(getWifiSSID());
         copy.setWifiPassword(getWifiPassword());
         copy.setWifiSecurityType(getWifiSecurityType());

@@ -37,6 +37,20 @@ export function searchPlay(query: string, limit = 30, signal?: AbortSignal): Pro
   return apiClient.get(`/private/play/search?${params}`, signal);
 }
 
+export function playPackageFromInput(input: string): string | null {
+  const value = input.trim();
+  const valid = /^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$/;
+  if (valid.test(value)) return value;
+  try {
+    const url = new URL(value);
+    if (!['play.google.com', 'market.android.com'].includes(url.hostname) || url.pathname !== '/store/apps/details') return null;
+    const packageName = url.searchParams.get('id');
+    return packageName && valid.test(packageName) ? packageName : null;
+  } catch {
+    return null;
+  }
+}
+
 export const importPlayApp = (packageName: string): Promise<PlayImportResult> =>
   apiClient.post('/private/play/import', { packageName });
 

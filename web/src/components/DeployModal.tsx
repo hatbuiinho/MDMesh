@@ -24,6 +24,8 @@ export interface DeploySubject {
   /** Split-APK bundle parts — when set, push-to-device installs these together.
    *  (Config-assign stays single-URL and ignores this.) */
   parts?: { url: string; sha256?: string }[];
+  /** Fetches and hosts the release only after the administrator confirms deployment. */
+  prepare?: () => Promise<DeploySubject>;
 }
 
 type Tab = 'device' | 'config';
@@ -81,17 +83,25 @@ export function DeployModal({
     if (picked.size === 0) return;
     setBusy(true);
     setQueued(0);
+    let ready: DeploySubject;
+    try {
+      ready = subject.prepare ? await subject.prepare() : subject;
+    } catch (e) {
+      setBusy(false);
+      toast.push('err', 'Could not prepare app', e instanceof Error ? e.message : 'Download failed.');
+      return;
+    }
     let ok = 0;
     let fail = 0;
     for (const num of picked) {
       try {
         await installApp(num, {
-          url: subject.url,
-          packageName: subject.packageName,
-          versionCode: subject.versionCode,
-          sha256: subject.sha256,
+          url: ready.url,
+          packageName: ready.packageName,
+          versionCode: ready.versionCode,
+          sha256: ready.sha256,
           runAfterInstall: runAfter,
-          parts: subject.parts,
+          parts: ready.parts,
         });
         ok++;
       } catch {
@@ -113,6 +123,7 @@ export function DeployModal({
     if (!config || subject.applicationId == null) return;
     setBusy(true);
     try {
+      if (subject.prepare) await subject.prepare();
       const cid = Number(config);
       const links = await getAppConfigLinks(subject.applicationId);
       let found = false;
@@ -250,7 +261,7 @@ export function DeployModal({
             onClick={() => void (tab === 'device' ? pushNow() : assignConfig())}
           >
             {busy
-              ? tab === 'device' ? `Queueing ${queued}/${picked.size}…` : 'Assigning…'
+              ? tab === 'device' ? (queued ? `Queueing ${queued}/${picked.size}…` : 'Preparing APK…') : 'Preparing APK…'
               : tab === 'device' ? `Deploy to ${picked.size || ''}`.trim() : 'Assign'}
           </button>
         </div>

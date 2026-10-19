@@ -9,11 +9,12 @@ import {
   uploadBundle,
   commitUpload,
   saveAndroidApplication,
+  saveApplicationVersion,
   type Application,
   type BundleUploadResult,
 } from '../api/applications';
 import { searchFdroid, type FDroidApp } from '../api/fdroid';
-import { getPlayStatus, importPlayApp, pairPlayAccount, searchPlay, type PlayApp, type PlayStatus } from '../api/playstore';
+import { getPlayStatus, importPlayApp, pairPlayAccount, playPackageFromInput, searchPlay, type PlayApp, type PlayStatus } from '../api/playstore';
 import { DeployModal, type DeploySubject } from '../components/DeployModal';
 import { ApkDropzone } from '../components/ApkDropzone';
 
@@ -67,8 +68,31 @@ async function resolveApp(app: Application): Promise<DeploySubject> {
       /* malformed parts — ignore, fall back to url */
     }
   }
-  if (!url && !(parts && parts.length)) throw new Error('This app has no APK to deploy.');
+  if (!url && !(parts && parts.length)) {
+    if (app.versionCode === 0) return {
+      label: app.name, packageName: app.pkg, url: '', applicationId: app.id,
+      prepare: () => preparePlayApp(app.pkg, app.id),
+    };
+    throw new Error('This app has no APK to deploy.');
+  }
   return { label: app.name, packageName: app.pkg, url: url ?? '', versionCode, sha256, applicationId: app.id, parts };
+}
+
+async function preparePlayApp(packageName: string, applicationId: number): Promise<DeploySubject> {
+  const imported = await importPlayApp(packageName);
+  if (imported.packageName !== packageName || imported.parts.length === 0) throw new Error('Downloaded package does not match the selected app.');
+  const version = imported.version || String(imported.versionCode);
+  await saveApplicationVersion({
+    applicationId, version, versionCode: imported.versionCode,
+    url: imported.parts.length === 1 ? imported.parts[0].url : undefined,
+    parts: imported.parts.length > 1 ? JSON.stringify(imported.parts) : undefined,
+  });
+  return {
+    label: imported.name, packageName, applicationId, versionCode: imported.versionCode,
+    url: imported.parts.length === 1 ? imported.parts[0].url : '',
+    sha256: imported.parts.length === 1 ? imported.parts[0].sha256 : undefined,
+    parts: imported.parts.length > 1 ? imported.parts.map(({ url, sha256 }) => ({ url, sha256 })) : undefined,
+  };
 }
 
 export function AppsPage() {
@@ -191,45 +215,35 @@ function PlayStoreSource({ onDeploy, libraryRevision }: { onDeploy: (s: DeploySu
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [q, status]);
 
-  async function importAndDeploy(app: PlayApp) {
+  async function addPackage(app: PlayApp) {
     setImporting(app.packageName);
-    setImportStage('Downloading and verifying APK files…');
+    setImportStage('Adding package to Library…');
     setError(null);
     try {
-      const imported = await importPlayApp(app.packageName);
-      setImportStage('Saving to Library…');
-      const version = imported.version || String(imported.versionCode);
-      let applicationId: number | undefined;
-      try {
-        const saved = await saveAndroidApplication(imported.parts.length === 1
-          ? { name: imported.name, pkg: imported.packageName, url: imported.parts[0].url, version, versionCode: imported.versionCode, type: 'app' }
-          : { name: imported.name, pkg: imported.packageName, version, versionCode: imported.versionCode, type: 'app', parts: JSON.stringify(imported.parts) });
-        applicationId = saved.id;
-        setLibraryApps((current) => new Map(current).set(saved.pkg, saved));
-      } catch {
-        const saved = (await listApplications(imported.packageName).catch(() => []))
-          .find((item) => item.pkg === imported.packageName);
-        applicationId = saved?.id;
-        if (saved) setLibraryApps((current) => new Map(current).set(saved.pkg, saved));
-      }
-      toast.push('ok', 'Imported from Play Store', `${imported.name} is hosted in your Library.`);
-      onDeploy({
-        label: imported.name,
-        packageName: imported.packageName,
-        url: imported.parts.length === 1 ? imported.parts[0].url : '',
-        versionCode: imported.versionCode,
-        sha256: imported.parts.length === 1 ? imported.parts[0].sha256 : undefined,
-        parts: imported.parts.length > 1 ? imported.parts.map(({ url, sha256 }) => ({ url, sha256 })) : undefined,
-        applicationId,
-      });
+      const saved = await saveAndroidApplication({ name: app.name, pkg: app.packageName, version: '0', versionCode: 0, type: 'app' });
+      setLibraryApps((current) => new Map(current).set(saved.pkg, saved));
+      toast.push('ok', 'Package added', `${app.name} is in your Library. No APK was downloaded.`);
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'The app could not be imported.';
+      const message = e instanceof Error ? e.message : 'The package could not be added.';
       setError(message);
-      toast.push('err', 'Play Store import failed', message);
+      toast.push('err', 'Add package failed', message);
     } finally {
       setImporting(null);
       setImportStage(null);
     }
+  }
+
+  async function addPackageById() {
+    const packageName = playPackageFromInput(q);
+    if (!packageName) {
+      toast.push('err', 'Invalid package or link', 'Enter a package ID or a Google Play app link.');
+      return;
+    }
+    if (libraryApps.has(packageName)) {
+      toast.push('ok', 'Already in Library', `${packageName} is already available to deploy.`);
+      return;
+    }
+    await addPackage({ name: apps.find((app) => app.packageName === packageName)?.name || packageName, packageName });
   }
 
   async function deployFromLibrary(app: Application) {
@@ -306,8 +320,9 @@ function PlayStoreSource({ onDeploy, libraryRevision }: { onDeploy: (s: DeploySu
       <div className="play-toolbar">
         <div className="dv-search play-search">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" /></svg>
-          <input type="search" placeholder="Search by app name or package ID" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+          <input type="search" placeholder="Search app name, package ID or Play link" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
         </div>
+        <button className="btn btn-sm" disabled={importing !== null || !playPackageFromInput(q)} onClick={() => void addPackageById()}>Add package</button>
         <span className="play-connected"><i /> Private account connected</span>
         <button className="btn btn-sm" onClick={() => setShowRelink((value) => !value)}>
           {showRelink ? 'Cancel relink' : 'Relink account'}
@@ -323,7 +338,7 @@ function PlayStoreSource({ onDeploy, libraryRevision }: { onDeploy: (s: DeploySu
       {error && <div className="banner banner-alert">{error}</div>}
       {searching ? <div className="panel"><div className="empty"><span className="spin" /> Searching Play Store…</div></div>
         : q.trim().length < 2 ? <div className="play-empty"><div className="play-empty-mark" aria-hidden="true">▶</div><span className="label">Find apps on Google Play</span><p>Search free apps by name or paste an exact package ID.</p></div>
-        : apps.length === 0 ? <div className="panel"><div className="empty"><span className="label">No results</span>No compatible apps matched your search.</div></div>
+        : apps.length === 0 ? <div className="panel"><div className="empty"><span className="label">No results</span>Try the full app name, package ID, or a Google Play app link.</div></div>
         : <div className="app-grid">{apps.map((app) => {
           const blocked = app.paid || app.compatible === false;
           const libraryApp = libraryApps.get(app.packageName);
@@ -337,11 +352,11 @@ function PlayStoreSource({ onDeploy, libraryRevision }: { onDeploy: (s: DeploySu
             </div>}
             {importing === app.packageName && <div className="play-import-progress" role="status"><span className="spin" />{importStage}</div>}
             <div className="app-foot"><span className="app-ver">{app.paid ? 'Paid — unsupported' : app.compatible === false ? 'Incompatible' : app.versionName ? `v${app.versionName}` : 'Free'}</span>
-              <button className="btn btn-sm btn-primary" disabled={blocked || importing !== null} onClick={() => libraryApp ? void deployFromLibrary(libraryApp) : void importAndDeploy(app)}>{importing === app.packageName ? 'Importing…' : libraryApp ? 'Deploy' : 'Import'}</button>
+              <button className="btn btn-sm btn-primary" disabled={blocked || importing !== null} onClick={() => libraryApp ? void deployFromLibrary(libraryApp) : void addPackage(app)}>{importing === app.packageName ? 'Adding…' : libraryApp ? 'Deploy' : 'Add package'}</button>
             </div>
           </div>;
         })}</div>}
-      <div className="play-footnote">Imports are stored in your Library for <span className="mono">{status.profile}</span>. Play access uses an unofficial protocol.</div>
+      <div className="play-footnote">Packages are saved without downloading APKs. Deploy downloads a release for <span className="mono">{status.profile}</span>. Play access uses an unofficial protocol.</div>
     </div>
   );
 }
@@ -364,9 +379,35 @@ function AppIcon({ name, url }: { name: string; url?: string | null }) {
 }
 
 function LibrarySource({ onDeploy }: { onDeploy: (app: Application) => void }) {
+  const toast = useToast();
   const [apps, setApps] = useState<Application[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState('');
+  const [packageId, setPackageId] = useState('');
+  const [adding, setAdding] = useState(false);
+
+  async function addPackageId() {
+    const pkg = packageId.trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$/.test(pkg)) {
+      toast.push('err', 'Invalid package ID', 'Enter an Android package ID such as com.example.app.');
+      return;
+    }
+    if (apps?.some((app) => app.pkg === pkg)) {
+      toast.push('ok', 'Already in Library', `${pkg} is already registered.`);
+      return;
+    }
+    setAdding(true);
+    try {
+      const saved = await saveAndroidApplication({ name: pkg, pkg, version: '0', versionCode: 0, type: 'app' });
+      setApps((current) => [...(current ?? []), saved]);
+      setPackageId('');
+      toast.push('ok', 'Package added', `${pkg} is registered. No APK was downloaded or installed.`);
+    } catch (e) {
+      toast.push('err', 'Add package failed', e instanceof Error ? e.message : '');
+    } finally {
+      setAdding(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -387,6 +428,13 @@ function LibrarySource({ onDeploy }: { onDeploy: (app: Application) => void }) {
 
   return (
     <>
+      <div className="play-pair" style={{ marginBottom: 16 }}>
+        <label className="field"><span>Android package ID</span>
+          <input className="input mono" value={packageId} placeholder="com.example.app" onChange={(e) => setPackageId(e.target.value)} />
+        </label>
+        <button className="btn btn-primary" disabled={adding || !packageId.trim()} onClick={() => void addPackageId()}>{adding ? 'Adding…' : 'Add package'}</button>
+        <span className="note">Registers the package only. The APK downloads when you deploy it.</span>
+      </div>
       <div className="dv-search" style={{ width: 260, marginBottom: 16 }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="11" cy="11" r="7" />
@@ -418,7 +466,7 @@ function LibrarySource({ onDeploy }: { onDeploy: (app: Application) => void }) {
                 </div>
               </div>
               <div className="app-foot">
-                <span className="app-ver">{a.version ? `v${a.version}` : '—'}</span>
+                <span className="app-ver">{a.version === '0' && !a.url ? 'Package only' : a.version ? `v${a.version}` : '—'}</span>
                 <button className="btn btn-sm btn-primary" onClick={() => onDeploy(a)}>
                   Deploy
                 </button>

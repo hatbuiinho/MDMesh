@@ -55,6 +55,7 @@ services:
       GPLAYDL_DISPENSER_URL: http://play-dispenser:8080
       PLAY_DEVICE_ARCH: ${PLAY_DEVICE_ARCH:-arm64}
       PLAY_DEVICE_LOCALE: ${PLAY_DEVICE_LOCALE:-en-US}
+      PLAY_SEARCH_LOCALE: ${PLAY_SEARCH_LOCALE:-vi-VN}
     volumes:
       - playdata:/data
     depends_on:

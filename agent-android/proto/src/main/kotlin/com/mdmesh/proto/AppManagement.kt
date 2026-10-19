@@ -12,7 +12,8 @@ object AppManagement {
     const val SILENT_INSTALL = "silentInstall"
     const val APP_ALLOWLIST = "appAllowlist"
     const val USAGE_LIMIT = "usageLimit"
+    const val REST_SCHEDULE = "restSchedule"
 
     /** Keys (before the `app.` prefix) advertised in `capabilities.appManagement` when Device Owner. */
-    val DEVICE_OWNER_KEYS: List<String> = listOf(SILENT_INSTALL, APP_ALLOWLIST, USAGE_LIMIT)
+    val DEVICE_OWNER_KEYS: List<String> = listOf(SILENT_INSTALL, APP_ALLOWLIST, USAGE_LIMIT, REST_SCHEDULE)
 }

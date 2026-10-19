@@ -1,0 +1,17 @@
+.git
+.env
+.env.*
+.deployment
+.android-docker
+**/node_modules
+**/target
+**/.gradle
+**/.kotlin
+**/build
+web/dist
+brain
+releases
+**/*.jks
+**/*.keystore
+**/*.apk
+**/*.aab

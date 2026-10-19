@@ -11,6 +11,7 @@ import java.util.List;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class DesiredAppUsage {
+    private List<AppRestSchedule> schedules = new ArrayList<AppRestSchedule>();
     private String timezone = "UTC";
     private List<AppUsageRule> rules = new ArrayList<AppUsageRule>();
     private List<AppUsageGrant> overrides = new ArrayList<AppUsageGrant>();
