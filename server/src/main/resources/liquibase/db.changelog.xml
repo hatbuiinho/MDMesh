@@ -3027,4 +3027,19 @@
         </sql>
         <rollback>DROP TABLE networkAccessAudit; DROP TABLE networkAccessRequest; DROP TABLE networkDevicePolicyVersion; DROP TABLE networkAccessPolicy;</rollback>
     </changeSet>
+    <changeSet id="26.10.20-network-admin-notifications" author="mdmesh" context="common">
+        <sql>
+            CREATE TABLE networkAdminSubscription (
+                id SERIAL PRIMARY KEY,
+                userId INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                customerId INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+                installationId VARCHAR(64) NOT NULL,
+                tokenHash VARCHAR(64) NOT NULL UNIQUE,
+                credentialVersion VARCHAR(64) NOT NULL,
+                expiresAt BIGINT NOT NULL,
+                UNIQUE(userId,installationId)
+            );
+        </sql>
+        <rollback>DROP TABLE networkAdminSubscription;</rollback>
+    </changeSet>
 </databaseChangeLog>

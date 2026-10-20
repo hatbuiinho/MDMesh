@@ -5,7 +5,9 @@ import android.os.*
 import android.content.*
 import android.graphics.Color
 import android.widget.*
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
+import com.mdmesh.agent.ui.AgentUi
+import com.mdmesh.agent.R
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.Lifecycle
@@ -18,7 +20,7 @@ import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class RestScheduleActivity : ComponentActivity() {
+class RestScheduleActivity : AppCompatActivity() {
     @Inject lateinit var usage: AppUsageManager
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,24 +36,21 @@ class RestScheduleActivity : ComponentActivity() {
     }
     private fun render() {
         val column = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(32, 32, 32, 32)
-            setBackgroundColor(Color.rgb(14, 17, 23))
+            orientation = LinearLayout.VERTICAL; setPadding(AgentUi.dp(this@RestScheduleActivity,16),0,AgentUi.dp(this@RestScheduleActivity,16),0)
+            setBackgroundColor(getColor(R.color.network_background))
         }
         fun line(value: String, size: Float = 16f) {
-            column.addView(TextView(this).apply { text = value; textSize = size; setTextColor(Color.WHITE); setPadding(0, 14, 0, 14) })
+            column.addView(TextView(this).apply { text = value; textSize = size; setTextColor(getColor(R.color.network_on_surface)); setPadding(0, 14, 0, 14) })
         }
-        column.addView(Button(this).apply { text = "Đóng"; setOnClickListener { finish() } })
-        line("Lịch nghỉ và sử dụng ứng dụng", 24f)
+        column.addView(AgentUi.toolbar(this,"Lịch sử dụng"))
         line(summary(this, usage))
         if (Build.VERSION.SDK_INT >= 31 && !getSystemService(AlarmManager::class.java).canScheduleExactAlarms()) {
-            column.addView(Button(this).apply {
-                text = "Cho phép hẹn giờ chính xác"
+            column.addView(AgentUi.button(this,"Cho phép hẹn giờ chính xác",primary=false).apply {
                 setOnClickListener { runCatching { startActivity(Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, android.net.Uri.parse("package:$packageName"))) } }
             })
         }
         if (!getSystemService(android.app.NotificationManager::class.java).areNotificationsEnabled()) {
-            column.addView(Button(this).apply {
-                text = "Bật thông báo lịch nghỉ"
+            column.addView(AgentUi.button(this,"Bật thông báo lịch nghỉ",primary=false).apply {
                 setOnClickListener { runCatching { startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$packageName"))) } }
             })
         }
@@ -70,7 +69,7 @@ class RestScheduleActivity : ComponentActivity() {
             }
             line("Agent và thành phần hệ thống thiết yếu luôn được bảo vệ. Hạn mức ngày và các lịch khác vẫn áp dụng.", 14f)
         }
-        setContentView(ScrollView(this).apply { addView(column) })
+        setContentView(ScrollView(this).apply { addView(column);AgentUi.insets(this@RestScheduleActivity,this,horizontal=0) })
     }
     companion object {
         fun appLabel(context: Context, pkg: String): String = runCatching {

@@ -43,5 +43,6 @@ public class PublicRestModule extends ServletModule {
         this.bind(StatsResource.class);
         this.bind(AgentResource.class);
         this.bind(NetworkAccessAgentResource.class);
+        this.bind(NetworkAdminNotificationResource.class);
     }
 }

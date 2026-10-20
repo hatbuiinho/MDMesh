@@ -20,6 +20,7 @@ public class NetworkAccessResource {
     private final ConfigReconciler reconciler;
     private final PushService push;
     private final AgentCommandDAO commands;
+    @Inject private com.hmdm.notification.NetworkAdminSubscriptions subscriptions;
     @Inject public NetworkAccessResource(NetworkAccessDAO dao,ConfigurationDAO configurations,DeviceDAO devices,ConfigReconciler reconciler,PushService push,AgentCommandDAO commands) {
         this.dao=dao;this.configurations=configurations;this.devices=devices;this.reconciler=reconciler;this.push=push;this.commands=commands;
     }
@@ -35,6 +36,13 @@ public class NetworkAccessResource {
         if(!configAccess(id))return Response.PERMISSION_DENIED();
         String error=validateRules(rules);if(error!=null)return Response.ERROR(error);
         dao.save(id,rules);push.notifyDevicesOnUpdate(id);return Response.OK(rules);
+    }
+    public static class NotificationRegistration { public String installationId; }
+    @POST @Path("/notifications/register") @Consumes(MediaType.APPLICATION_JSON)
+    public Response registerNotifications(NotificationRegistration body) {
+        try {return Response.OK(subscriptions.register(body==null?null:body.installationId));}
+        catch(java.lang.SecurityException e){return Response.PERMISSION_DENIED();}
+        catch(IllegalArgumentException e){return Response.ERROR(e.getMessage());}
     }
     public static boolean validDomain(String host) {
         if(host==null||host.length()>253||!host.equals(host.toLowerCase(Locale.ROOT))||host.endsWith("."))return false;
@@ -142,6 +150,7 @@ public class NetworkAccessResource {
         row.setDecisionBy(SecurityContext.get().getCurrentUserName());row.setDecisionNote(body.note);row.setDecidedAt(System.currentTimeMillis());
         if(dao.decide(row,expected)!=1)return Response.ERROR("This request was already changed. Refresh the list.");
         if(device.getConfigurationId()!=null)push.notifyDevicesOnUpdate(device.getConfigurationId());
+        if(com.hmdm.notification.NetworkAdminWakeHub.INSTANCE!=null)com.hmdm.notification.NetworkAdminWakeHub.INSTANCE.signal(device.getCustomerId());
         return Response.OK(row);
     }
 }

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="network_background">#F4F7FC</color>
+    <color name="network_surface">#FFFFFF</color>
+    <color name="network_on_surface">#172B4D</color>
+    <color name="network_secondary_text">#52647D</color>
+    <color name="network_primary">#075CCB</color>
+    <color name="network_on_primary">#FFFFFF</color>
+    <color name="network_outline">#CFD8E5</color>
+</resources>

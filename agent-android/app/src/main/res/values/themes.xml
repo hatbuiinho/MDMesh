@@ -1,4 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.MdmAgent" parent="Theme.AppCompat.DayNight.NoActionBar" />
+    <!-- Match the Agent home screen. Define a complete light palette instead of
+         mixing dark overrides with DayNight defaults and OEM automatic darkening. -->
+    <style name="Theme.MdmAgent.NetworkAccess" parent="Theme.Material3.Light.NoActionBar">
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:textColorPrimary">@color/network_on_surface</item>
+        <item name="android:textColorSecondary">@color/network_secondary_text</item>
+        <item name="android:textColorHint">@color/network_secondary_text</item>
+        <item name="colorPrimary">@color/network_primary</item>
+        <item name="colorOnPrimary">@color/network_on_primary</item>
+        <item name="colorPrimaryContainer">#E5EFFF</item>
+        <item name="colorOnPrimaryContainer">#143D75</item>
+        <item name="colorSecondary">@color/network_primary</item>
+        <item name="colorOnSecondary">@color/network_on_primary</item>
+        <item name="colorSecondaryContainer">#E5EFFF</item>
+        <item name="colorOnSecondaryContainer">#143D75</item>
+        <item name="colorSurface">@color/network_surface</item>
+        <item name="colorOnSurface">@color/network_on_surface</item>
+        <item name="colorSurfaceVariant">#EDF2F8</item>
+        <item name="colorOnSurfaceVariant">@color/network_secondary_text</item>
+        <item name="colorSurfaceContainer">@color/network_surface</item>
+        <item name="colorSurfaceContainerLow">@color/network_surface</item>
+        <item name="colorSurfaceContainerHigh">#EDF2F8</item>
+        <item name="colorOutline">#64748B</item>
+        <item name="colorOutlineVariant">@color/network_outline</item>
+        <item name="colorError">#B3261E</item>
+        <item name="colorOnError">#FFFFFF</item>
+        <item name="android:windowBackground">@color/network_background</item>
+        <item name="android:colorBackground">@color/network_background</item>
+        <item name="colorOnBackground">@color/network_on_surface</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:statusBarColor">@color/network_background</item>
+        <item name="android:navigationBarColor">@color/network_background</item>
+    </style>
 </resources>

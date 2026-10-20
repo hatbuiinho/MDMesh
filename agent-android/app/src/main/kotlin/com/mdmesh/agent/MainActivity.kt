@@ -27,7 +27,9 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.content.Intent
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
+import com.mdmesh.agent.ui.AgentUi
+import com.mdmesh.agent.web.NetworkAccessClient
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -51,7 +53,7 @@ import javax.inject.Inject
 
 /** Device enrollment and management status. */
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     @Inject lateinit var deviceIdStore: DeviceIdStore
     @Inject lateinit var dpmHandle: DpmHandle
@@ -61,6 +63,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var syncStatus: SyncStatus
 
     @Inject lateinit var appUsage: com.mdmesh.core.usage.AppUsageManager
+    private lateinit var accountSummary: TextView
     private lateinit var restCard: TextView
 
     private lateinit var deviceIdValue: TextView
@@ -131,6 +134,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refresh() {
+        if(::accountSummary.isInitialized){val client=NetworkAccessClient(applicationContext);accountSummary.text=if(client.isAdmin())"Quản trị: ${client.accountName}" else "Quản lý thiết bị"}
         lifecycleScope.launch {
             val id = deviceIdStore.current()
             val registered = !id.isNullOrBlank()
@@ -234,6 +238,7 @@ class MainActivity : ComponentActivity() {
         dpmHandle.dpm.isDeviceOwnerApp(packageName)
 
     private fun buildUi(): ScrollView {
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window,false)
         window.statusBarColor = BACKGROUND
         window.navigationBarColor = BACKGROUND
         WindowInsetsControllerCompat(window, window.decorView).apply {
@@ -244,8 +249,9 @@ class MainActivity : ComponentActivity() {
             setPadding(dp(24), dp(28), dp(24), dp(28))
             isFocusableInTouchMode = true
         }
-        root.addView(text("MDMesh", 28f, PRIMARY, bold = true))
-        root.addView(text("Quản lý thiết bị", 14f, MUTED).apply { setPadding(0, dp(4), 0, dp(28)) })
+        root.addView(AgentUi.toolbar(this,"MDMesh",back=false))
+        accountSummary=text("Quản lý thiết bị",14f,MUTED).apply {setPadding(dp(16),dp(4),0,dp(24))}
+        root.addView(accountSummary)
 
         root.addView(card().apply {
             addView(text("TRẠNG THÁI THIẾT BỊ", 11f, MUTED, bold = true))
@@ -342,7 +348,7 @@ class MainActivity : ComponentActivity() {
             isFillViewport = true
             addView(root)
             ViewCompat.setOnApplyWindowInsetsListener(this) { view, insets ->
-                val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime())
+                val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime())
                 view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
                 insets
             }
@@ -384,20 +390,7 @@ class MainActivity : ComponentActivity() {
         layoutParams = LinearLayout.LayoutParams(MATCH, dp(54)).apply { topMargin = dp(8) }
     }
 
-    private fun action(title: String, primary: Boolean = true) = Button(this).apply {
-        text = title
-        isAllCaps = false
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-        setTypeface(typeface, Typeface.BOLD)
-        setTextColor(if (primary) Color.WHITE else PRIMARY)
-        background = android.graphics.drawable.RippleDrawable(
-            ColorStateList.valueOf(Color.parseColor("#240B63CE")),
-            surface(if (primary) PRIMARY else Color.parseColor("#EDF4FF")), null,
-        )
-        backgroundTintList = null
-        setPadding(dp(12), 0, dp(12), 0)
-        minHeight = dp(48)
-    }
+    private fun action(title:String,primary:Boolean=true):Button=AgentUi.button(this,title,primary)
 
     private fun text(s: String, sizeSp: Float, color: Int, bold: Boolean = false, mono: Boolean = false) = TextView(this).apply {
         text = s
@@ -413,11 +406,11 @@ class MainActivity : ComponentActivity() {
     private companion object {
         val TOKEN_PATTERN = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
         const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
-        val BACKGROUND = Color.parseColor("#F4F7FB")
-        val BORDER = Color.parseColor("#DFE6EF")
+        val BACKGROUND = Color.parseColor("#F4F7FC")
+        val BORDER = Color.parseColor("#CFD8E5")
         val TEXT = Color.parseColor("#172B4D")
         val MUTED = Color.parseColor("#52647D")
-        val PRIMARY = Color.parseColor("#0B63CE")
+        val PRIMARY = Color.parseColor("#075CCB")
         val OK = Color.parseColor("#16734B")
         val ALERT = Color.parseColor("#B42318")
     }

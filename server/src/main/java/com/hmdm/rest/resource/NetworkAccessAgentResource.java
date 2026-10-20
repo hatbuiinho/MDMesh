@@ -36,7 +36,9 @@ public class NetworkAccessAgentResource {
         if(!blocked(policy,body.packageName,body.domain))return Response.ERROR("This domain is not blocked by the current policy.");
         long now=System.currentTimeMillis();
         NetworkAccessRequest row=new NetworkAccessRequest();row.setDeviceNumber(number);row.setConfigurationId(device.getConfigurationId());row.setPolicyHash(body.policyHash);row.setDomain(body.domain);row.setPackageName(body.packageName);row.setReason(body.reason.trim());row.setCreatedAt(now);
-        if(dao.submit(row)<0)return Response.ERROR("Too many requests. Try again later.");
+        int submitted=dao.submit(row);
+        if(submitted<0)return Response.ERROR("Too many requests. Try again later.");
+        if(submitted>0&&com.hmdm.notification.NetworkAdminWakeHub.INSTANCE!=null)com.hmdm.notification.NetworkAdminWakeHub.INSTANCE.signal(device.getCustomerId());
         return Response.OK(dao.deviceRequests(number));
     }
     private static boolean match(List<String> rules,String host){return rules!=null&&rules.stream().anyMatch(r->host.equals(r)||host.endsWith("."+r));}

@@ -59,8 +59,9 @@
         android:theme="@style/Theme.MdmAgent"
         tools:targetApi="35">
 
-        <activity android:name=".web.NetworkAccessActivity" android:exported="false" android:lockTaskMode="if_whitelisted" />
-        <activity android:name=".usage.RestScheduleActivity" android:exported="false" android:lockTaskMode="if_whitelisted" />
+        <activity android:name=".web.AdminAccountActivity" android:exported="false" android:lockTaskMode="if_whitelisted" android:theme="@style/Theme.MdmAgent.NetworkAccess" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".web.NetworkAccessActivity" android:exported="false" android:lockTaskMode="if_whitelisted" android:theme="@style/Theme.MdmAgent.NetworkAccess" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".usage.RestScheduleActivity" android:theme="@style/Theme.MdmAgent.NetworkAccess" android:exported="false" android:lockTaskMode="if_whitelisted" />
         <receiver android:name=".usage.RestScheduleReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -74,6 +75,7 @@
         <!-- App-drawer status screen (real managed state). Not HOME — the kiosk launcher owns HOME. -->
         <activity
             android:name=".MainActivity"
+            android:theme="@style/Theme.MdmAgent.NetworkAccess"
             android:exported="true"
             android:launchMode="singleTask"
             android:lockTaskMode="if_whitelisted">
@@ -158,6 +160,9 @@
                 android:value="Device Owner MDM agent: maintains the management command channel (check-in + push socket) so the organization can administer this dedicated device." />
         </service>
 
+        <service android:name=".web.NetworkAdminNotificationService" android:exported="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-enabled admin request notifications while the screen is interactive; no background polling while asleep." />
+        </service>
         <service
             android:name=".web.WebFilterService"
             android:exported="false"

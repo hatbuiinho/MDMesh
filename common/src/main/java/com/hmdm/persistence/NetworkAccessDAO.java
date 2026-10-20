@@ -46,6 +46,7 @@ public class NetworkAccessDAO {
     public List<NetworkAccessRequest> list(int customer,String device){return list(customer,device,0);}
     public List<NetworkAccessRequest> list(int customer,String device,int offset){return mapper.list(customer,device,offset);}
     public List<NetworkAccessRequest> deviceRequests(String device){return mapper.deviceRequests(device);}
+    public List<NetworkAccessRequest> notificationCandidates(int customer){return mapper.notificationCandidates(customer);}
     public NetworkAccessRequest get(int id){return mapper.get(id);}
     public int insert(NetworkAccessRequest row){return mapper.insert(row);}
     @org.mybatis.guice.transactional.Transactional

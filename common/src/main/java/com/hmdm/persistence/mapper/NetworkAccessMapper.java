@@ -15,6 +15,8 @@ public interface NetworkAccessMapper {
     void save(@Param("id") int id,@Param("rules") String rules);
     @Select("SELECT r.*, COALESCE(NULLIF(d.description,''),d.number) AS deviceName FROM networkAccessRequest r JOIN devices d ON d.number=r.deviceNumber WHERE d.customerId=#{customer} AND (CAST(#{device} AS TEXT) IS NULL OR r.deviceNumber=#{device}) ORDER BY r.createdAt DESC,r.id DESC LIMIT 500 OFFSET #{offset}")
     List<NetworkAccessRequest> list(@Param("customer") int customer,@Param("device") String device,@Param("offset") int offset);
+    @Select("SELECT r.* FROM networkAccessRequest r JOIN devices d ON d.number=r.deviceNumber WHERE d.customerId=#{customer} AND r.status='pending' ORDER BY r.id DESC LIMIT 2000")
+    List<NetworkAccessRequest> notificationCandidates(int customer);
     @Select("SELECT * FROM networkAccessRequest WHERE id=#{id}")
     NetworkAccessRequest get(int id);
     @Select("SELECT * FROM networkAccessRequest WHERE deviceNumber=#{device} ORDER BY createdAt DESC,id DESC LIMIT 100")

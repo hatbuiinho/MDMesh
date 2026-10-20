@@ -24,6 +24,7 @@ class BootReceiver : BroadcastReceiver() {
             Intent.ACTION_BOOT_COMPLETED,
             "android.intent.action.LOCKED_BOOT_COMPLETED",
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                runCatching { com.mdmesh.agent.web.NetworkAdminNotificationService.start(context) }
                 // Keep local Settings factory reset unavailable. The authenticated server-side
                 // device.wipe command remains able to reset the device as Device Owner.
                 AdminReceiver.enforceFactoryResetRestriction(context)
