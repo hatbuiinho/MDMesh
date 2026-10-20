@@ -25,6 +25,7 @@ class MdmApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        com.mdmesh.agent.web.NetworkRequestWorker.enqueueIfPending(this)
         CheckInWorker.schedule(this)   // periodic reconcile (WorkManager floor)
         CheckInWorker.scheduleNow(this) // prompt check-in on every cold start (post-install/reboot)
         com.mdmesh.agent.usage.RestScheduleWorker.schedule(this)

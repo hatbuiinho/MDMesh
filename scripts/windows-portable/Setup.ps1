@@ -3,6 +3,11 @@ $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $root = $PSScriptRoot
 try {
+    foreach ($script in @('enroll-device-adb.py', 'publish-release.py')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $root ('app/scripts/' + $script)) -PathType Leaf)) {
+            throw 'Incomplete bundle: app/scripts is missing. Extract the complete MDMesh-Enroll-Windows.zip; scripts/windows-portable in the repository contains templates only.'
+        }
+    }
     if (-not [Environment]::Is64BitOperatingSystem) { throw 'This bundle requires 64-bit Windows 10/11.' }
     $manifest = Get-Content -LiteralPath (Join-Path $root 'tools-manifest.json') -Raw | ConvertFrom-Json
     $tools = Join-Path $root 'tools'

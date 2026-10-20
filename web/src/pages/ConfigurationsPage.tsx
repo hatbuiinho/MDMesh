@@ -22,6 +22,7 @@ import { AppPicker } from '../components/AppPicker';
 import { SyncBar } from '../components/SyncBar';
 import { KioskChangeConfirm, kioskAffectingChanges } from '../components/KioskChangeConfirm';
 import { Modal } from '../ui/Modal';
+import { NetworkPolicyEditor } from '../components/NetworkPolicyEditor';
 import { AppUsagePolicyEditor } from '../components/AppUsagePolicyEditor';
 import { WebFilterAppSelector, webFilterPackages } from '../components/WebFilterAppSelector';
 
@@ -619,6 +620,7 @@ function ConfigEditor({
       {activeSection === 'App usage' && <section className="panel cfg-panel">
         <div className="cfg-sec-h">App usage limits</div>
         <p className="note">Daily quotas and allowed time windows are enforced locally, including while devices are offline.</p>
+        <NetworkPolicyEditor configurationId={initial.id} apps={apps} readOnly={readOnly} />
         <AppUsagePolicyEditor configurationId={initial.id} apps={allowed} libraryApps={apps} readOnly={readOnly} />
       </section>}
 

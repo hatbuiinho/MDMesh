@@ -41,6 +41,7 @@ Advertised as an object (`tier`, `screenCapture`, `inputInjection`, `transport`)
 | key | meaning | notes |
 |-----|---------|-------|
 | `configApply` | accepts config.apply | |
+| `networkAccess` | per-app DNS policies, local denial history, unblock requests and device-bound grants | Unknown owners never inherit app/group grants |
 
 ## Command types
 

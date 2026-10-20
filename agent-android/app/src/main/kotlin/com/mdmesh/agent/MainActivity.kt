@@ -297,6 +297,12 @@ class MainActivity : ComponentActivity() {
             }, LinearLayout.LayoutParams(MATCH, dp(48)))
         }
         root.addView(scheduleSection)
+        root.addView(card().apply {
+            addView(text("Truy cập mạng", 18f, TEXT, bold = true))
+            addView(action("Xem truy cập bị chặn / gửi yêu cầu", primary = false).apply {
+                setOnClickListener { startActivity(Intent(this@MainActivity, com.mdmesh.agent.web.NetworkAccessActivity::class.java)) }
+            }, LinearLayout.LayoutParams(MATCH, dp(48)))
+        })
 
         val details = column().apply { visibility = View.GONE }
         root.addView(card().apply {

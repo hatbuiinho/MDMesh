@@ -26,6 +26,9 @@ data class ConfigApplyPayload(
 
 @Serializable
 data class WebAccessPolicy(
+    val policyHash: String = "",
+    val rules: List<NetworkRule> = emptyList(),
+    val grants: List<NetworkGrant> = emptyList(),
     val mode: String = "OFF",
     val domains: List<String> = emptyList(),
     val scope: String = "ALL",

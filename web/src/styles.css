@@ -3514,3 +3514,20 @@ a {
   .usage-day-presets,.usage-window-error { grid-column:auto; }
   .usage-window-remove { justify-self:start; }
 }
+
+/* Network access policies and scoped approvals */
+.network-page { display:flex; flex-direction:column; gap:16px; max-width:1100px; margin:0 auto; }
+.network-page > h1 { margin:0; font-size:24px; }
+.network-page > p,.network-card p { color:var(--muted); line-height:1.6; }
+.network-toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+.network-toolbar > input { flex:1; min-width:220px; }
+.network-card { overflow-wrap:anywhere; }
+.network-card > h3 { margin:0 0 10px; }
+.network-card > .btn { margin:4px 8px 0 0; }
+.network-policy .network-card,.network-dialog { display:flex; flex-direction:column; gap:14px; }
+.network-card > label,.network-dialog > label { display:flex; flex-direction:column; gap:6px; font-size:13px; }
+.network-card textarea,.network-dialog textarea { width:100%; resize:vertical; min-height:90px; }
+.network-dialog { width:min(640px,calc(100vw - 32px)); padding:24px; }
+.network-dialog h2,.network-dialog h3,.network-dialog p { margin:0; overflow-wrap:anywhere; }
+.network-dialog p { line-height:1.6; color:var(--muted); }
+@media(max-width:600px) { .network-toolbar > * { width:100%; } .network-page > h1 { font-size:20px; } }

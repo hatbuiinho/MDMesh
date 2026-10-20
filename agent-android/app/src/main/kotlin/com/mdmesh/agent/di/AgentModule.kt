@@ -381,7 +381,8 @@ object AgentModule {
         @ApplicationContext context: Context,
         handle: DpmHandle,
         serverConfig: ServerConfigStore,
-    ): WebAccessManager = AndroidWebAccessManager(context, handle.dpm, handle.admin, serverConfig)
+        suspensionManager: PackageSuspensionManager,
+    ): WebAccessManager = AndroidWebAccessManager(context, handle.dpm, handle.admin, serverConfig, suspensionManager)
 
     @Provides
     @Singleton

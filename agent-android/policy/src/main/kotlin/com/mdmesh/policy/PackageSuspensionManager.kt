@@ -6,7 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 
-enum class SuspensionReason { APPLICATION_ALLOWLIST, APP_USAGE }
+enum class SuspensionReason { APPLICATION_ALLOWLIST, APP_USAGE, WEB_FILTER_VPN }
 
 /** Coordinates every MDMesh feature that controls Android's single package-suspended bit. */
 interface PackageSuspensionManager {

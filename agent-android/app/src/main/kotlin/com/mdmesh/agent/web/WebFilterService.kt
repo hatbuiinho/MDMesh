@@ -22,18 +22,30 @@ import java.util.concurrent.Executors
 class WebFilterService : VpnService() {
     @Volatile private var tun: ParcelFileDescriptor? = null
     private val worker = Executors.newSingleThreadExecutor()
+    // A slow upstream must not hold up the packet reader or unrelated permitted lookups.
+    private val forwarding = java.util.concurrent.ThreadPoolExecutor(
+        4, 4, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
+        java.util.concurrent.ArrayBlockingQueue<Runnable>(64),
+        java.util.concurrent.ThreadPoolExecutor.AbortPolicy(),
+    )
     @Volatile private var policy = WebFilterPolicy("OFF", emptySet(), emptySet())
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         foreground()
         val updated = WebFilterConfig.load(this)
         // Always-on VPN and config.apply can start the same service back-to-back.
-        if (updated == policy && tun != null) return START_STICKY
+        if (updated == policy && tun != null && WebFilterRuntime.applied == updated) return START_STICKY
         policy = updated
+        WebFilterRuntime.applied = null
+        WebFilterRuntime.failure = null
         val previous = tun
-        tun = null
-        previous?.close()
-        startTunnel()
+        // Establish first: closing the last TUN before replacement races always-on VPN recovery.
+        try { startTunnel() } catch (e: Exception) {
+            WebFilterRuntime.failure = e.message ?: "VPN establishment failed"
+            stopSelf()
+        } finally {
+            if (previous !== tun) previous?.close()
+        }
         return START_STICKY
     }
 
@@ -44,22 +56,33 @@ class WebFilterService : VpnService() {
             // The management control-plane must remain reachable even if an administrator enters
             // an overly broad deny rule. Other applications still use the filtered DNS route.
             .setBlocking(false)
-        if (policy.scope == "SELECTED") {
+        if (!policy.allApps) {
             // A configuration can name an app before it is installed. PackageEventReceiver
             // schedules a config reapply after installation, which rebuilds this VPN route.
             var installed = 0
-            policy.packages.forEach { pkg ->
+            policy.filteredPackages.forEach { pkg ->
                 try { builder.addAllowedApplication(pkg); installed++ }
                 catch (_: android.content.pm.PackageManager.NameNotFoundException) { /* wait for install */ }
             }
             // An empty allowlist would make the VPN apply to every app on Android.
-            if (installed == 0) return
+            if (installed == 0) { tun = null; WebFilterRuntime.applied = policy; return }
         } else {
             builder.addDisallowedApplication(packageName)
         }
         tun = builder.establish()
-        val descriptor = tun ?: return
-        worker.execute { loop(descriptor) }
+        val descriptor = tun ?: error("VPN establishment was refused")
+        val snapshot = policy
+        worker.execute {
+            if (tun === descriptor) {
+                WebFilterRuntime.applied = snapshot
+                try { loop(descriptor) } finally {
+                    if (tun === descriptor) {
+                        WebFilterRuntime.applied = null
+                        WebFilterRuntime.failure = "DNS packet reader stopped"
+                    }
+                }
+            }
+        }
     }
 
     private fun loop(fd: ParcelFileDescriptor) {
@@ -84,15 +107,47 @@ class WebFilterService : VpnService() {
             }
             if (size <= 28 || (buffer[0].toInt() ushr 4) != 4 || buffer[9].toInt() != 17) continue
             val ihl = (buffer[0].toInt() and 0x0f) * 4
+            if (ihl < 20 || ihl + 8 > size || buffer[ihl + 2].toInt() != 0 || (buffer[ihl + 3].toInt() and 255) != 53) continue
             val dnsOffset = ihl + 8
-            val host = readQuestionName(buffer, dnsOffset, size) ?: continue
-            val blocked = policy.blocks(host)
+            val host = readQuestionName(buffer, dnsOffset, size)?.let(DomainMatcher::normalize)?.takeIf { it.isNotEmpty() } ?: continue
+            val owner = connectionPackage(buffer, ihl)
+            val blocked = policy.blocks(host, owner)
+            if (com.mdmesh.agent.BuildConfig.DEBUG) android.util.Log.d("MDMeshDNS", "query $host app=$owner blocked=$blocked")
+            if (blocked) NetworkAccessStore.record(this, policy.policyHash, host, owner, policy.blockedRules(host, owner))
             val query = buffer.copyOfRange(dnsOffset, size)
-            val response = if (blocked) DnsForwarder.error(query, 3) else upstream(query)
-            if (tun !== fd) break
-            try { output.write(ipv4UdpReply(buffer, ihl, response)) }
-            catch (_: Exception) { break }
+            val request = buffer.copyOf(size)
+            val snapshot = policy
+            val respond = Runnable {
+                val response = if (blocked) DnsForwarder.error(query, 3) else {
+                    val answer = upstream(query)
+                    if (snapshot.rules.isNotEmpty() || snapshot.grants.isNotEmpty()) DnsForwarder.withoutCache(answer) else answer
+                }
+                if (com.mdmesh.agent.BuildConfig.DEBUG) android.util.Log.d("MDMeshDNS", "reply $host rcode=${response[3].toInt() and 15} bytes=${response.size} current=${tun === fd}")
+                if (tun === fd) synchronized(output) {
+                    if (tun === fd) runCatching { output.write(ipv4UdpReply(request, ihl, response)) }.onFailure {
+                        if (com.mdmesh.agent.BuildConfig.DEBUG) android.util.Log.e("MDMeshDNS", "reply write failed", it)
+                    }
+                }
+            }
+            if (blocked) respond.run() else try { forwarding.execute(respond) }
+            catch (_: java.util.concurrent.RejectedExecutionException) {
+                if (tun === fd) synchronized(output) {
+                    if (tun === fd) runCatching { output.write(ipv4UdpReply(request, ihl, DnsForwarder.error(query, 2))) }
+                }
+            }
         }
+    }
+
+    private fun connectionPackage(packet: ByteArray, ihl: Int): String? {
+        if (Build.VERSION.SDK_INT < 29) return null
+        return runCatching {
+            val local = java.net.InetSocketAddress(java.net.InetAddress.getByAddress(packet.copyOfRange(12, 16)), ((packet[ihl].toInt() and 255) shl 8) or (packet[ihl+1].toInt() and 255))
+            val remote = java.net.InetSocketAddress(java.net.InetAddress.getByAddress(packet.copyOfRange(16, 20)), 53)
+            val uid = getSystemService(ConnectivityManager::class.java).getConnectionOwnerUid(OsConstants.IPPROTO_UDP, local, remote)
+            if (uid < 10000) return null
+            // Shared UIDs cannot be narrowed safely to one app.
+            packageManager.getPackagesForUid(uid)?.singleOrNull()?.takeIf { it != packageName && (policy.allApps || it in policy.filteredPackages) }
+        }.getOrNull()
     }
 
     private fun upstream(query: ByteArray): ByteArray {
@@ -166,5 +221,5 @@ class WebFilterService : VpnService() {
             .setContentTitle("Web access protected").setContentText("MDMesh domain policy is active").setOngoing(true).build())
     }
 
-    override fun onDestroy() { tun?.close(); tun = null; worker.shutdownNow(); super.onDestroy() }
+    override fun onDestroy() { WebFilterRuntime.applied = null; tun?.close(); tun = null; worker.shutdownNow(); forwarding.shutdownNow(); super.onDestroy() }
 }

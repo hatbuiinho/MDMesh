@@ -2994,4 +2994,37 @@
         </sql>
         <rollback>DROP TABLE appUsageSettings;</rollback>
     </changeSet>
+    <changeSet id="26.10.20-network-access-requests" author="mdmesh" context="common">
+        <sql>
+            CREATE TABLE networkAccessPolicy (
+                configurationId INTEGER PRIMARY KEY REFERENCES configurations(id) ON DELETE CASCADE,
+                rules TEXT NOT NULL DEFAULT '[]'
+            );
+            CREATE TABLE networkDevicePolicyVersion (
+                deviceNumber VARCHAR(255) PRIMARY KEY REFERENCES devices(number) ON DELETE CASCADE,
+                fingerprint VARCHAR(64) NOT NULL, generation BIGINT NOT NULL DEFAULT 1
+            );
+            CREATE TABLE networkAccessRequest (
+                id SERIAL PRIMARY KEY,
+                deviceNumber VARCHAR(256) NOT NULL REFERENCES devices(number) ON DELETE CASCADE,
+                configurationId INTEGER REFERENCES configurations(id) ON DELETE CASCADE,
+                policyHash VARCHAR(64) NOT NULL,
+                packageName VARCHAR(255) NOT NULL DEFAULT '',
+                domain VARCHAR(253) NOT NULL,
+                reason VARCHAR(1000) NOT NULL,
+                status VARCHAR(16) NOT NULL DEFAULT 'pending',
+                decisionBy VARCHAR(255), decisionNote VARCHAR(1000), grantPackages TEXT,
+                expiresAt BIGINT, createdAt BIGINT NOT NULL, decidedAt BIGINT
+            );
+            CREATE TABLE networkAccessAudit (
+                id SERIAL PRIMARY KEY,
+                requestId INTEGER NOT NULL REFERENCES networkAccessRequest(id) ON DELETE CASCADE,
+                status VARCHAR(16) NOT NULL, actor VARCHAR(255), note VARCHAR(1000),
+                grantPackages TEXT, expiresAt BIGINT, createdAt BIGINT NOT NULL
+            );
+            CREATE UNIQUE INDEX uq_network_request_pending ON networkAccessRequest(deviceNumber,configurationId,policyHash,packageName,domain) WHERE status='pending';
+            CREATE INDEX idx_network_request_device ON networkAccessRequest(deviceNumber,createdAt);
+        </sql>
+        <rollback>DROP TABLE networkAccessAudit; DROP TABLE networkAccessRequest; DROP TABLE networkDevicePolicyVersion; DROP TABLE networkAccessPolicy;</rollback>
+    </changeSet>
 </databaseChangeLog>

@@ -60,4 +60,19 @@ class DnsForwarderTest {
         })
         assertEquals(1, attempts)
     }
+
+    @Test fun `per-app forwarding clears answer TTL but preserves EDNS flags and original bytes`() {
+        val rr = byteArrayOf(0xc0.toByte(),12,0,1,0,1,0,0,1,44,0,4,1,2,3,4)
+        val opt = byteArrayOf(0,0,41,16,0,0,0,0x80.toByte(),0,0,0)
+        val packet=(answer+rr+opt).also { it[7]=1;it[11]=1 }
+        val result=DnsForwarder.withoutCache(packet)
+        assertArrayEquals(byteArrayOf(0,0,0,0),result.copyOfRange(query.size+6,query.size+10))
+        assertArrayEquals(opt,result.copyOfRange(query.size+rr.size,result.size))
+        assertEquals(1,packet[query.size+8].toInt())
+    }
+    @Test fun `malformed DNS compression cannot crash packet loop`() {
+        val bad=answer+byteArrayOf(0xc0.toByte())
+        bad[7]=1
+        assertEquals(2,DnsForwarder.withoutCache(bad)[3].toInt() and 15)
+    }
 }

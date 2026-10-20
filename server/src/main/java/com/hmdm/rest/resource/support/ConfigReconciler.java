@@ -33,6 +33,7 @@ public class ConfigReconciler {
     private final UnsecureDAO unsecureDAO;
     private final AgentCommandDAO commandDAO;
     private final AppUsageDAO appUsageDAO;
+    @Inject private com.hmdm.persistence.NetworkAccessDAO networkAccessDAO;
 
     @Inject
     public ConfigReconciler(UnsecureDAO unsecureDAO, AgentCommandDAO commandDAO, AppUsageDAO appUsageDAO) {
@@ -49,6 +50,7 @@ public class ConfigReconciler {
         List<Application> apps = unsecureDAO.getPlainConfigurationAppsOptimized(cfg.getId());
         DesiredConfig doc = DesiredConfigBuilder.build(cfg, apps);
         doc.setAppUsage(appUsageDAO.desiredForDevice(cfg.getId(), device.getNumber()));
+        if (networkAccessDAO != null) doc.setWebAccess(networkAccessDAO.decorate(cfg.getId(),device.getNumber(),doc.getWebAccess()));
         doc.setRevision(DesiredConfigBuilder.revision(doc));
         return doc;
     }

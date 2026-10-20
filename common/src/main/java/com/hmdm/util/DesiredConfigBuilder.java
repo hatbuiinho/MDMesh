@@ -214,6 +214,9 @@ public final class DesiredConfigBuilder {
         if (doc != null && doc.getAppUsage() != null) required.add(APP_USAGE_CAPABILITY);
         if (doc != null && doc.getAppUsage() != null && doc.getAppUsage().getSchedules() != null && !doc.getAppUsage().getSchedules().isEmpty()) required.add("app.restSchedule");
         if (doc != null && doc.getWebAccess() != null) required.add(WEB_ACCESS_CAPABILITY);
+        if (doc != null && doc.getWebAccess() != null &&
+            ((doc.getWebAccess().getRules()!=null && !doc.getWebAccess().getRules().isEmpty()) ||
+             (doc.getWebAccess().getGrants()!=null && !doc.getWebAccess().getGrants().isEmpty()))) required.add("device.networkAccess");
         return String.join("&", required);
     }
 }

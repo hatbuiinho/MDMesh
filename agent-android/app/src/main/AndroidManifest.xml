@@ -59,6 +59,7 @@
         android:theme="@style/Theme.MdmAgent"
         tools:targetApi="35">
 
+        <activity android:name=".web.NetworkAccessActivity" android:exported="false" android:lockTaskMode="if_whitelisted" />
         <activity android:name=".usage.RestScheduleActivity" android:exported="false" android:lockTaskMode="if_whitelisted" />
         <receiver android:name=".usage.RestScheduleReceiver" android:exported="false">
             <intent-filter>

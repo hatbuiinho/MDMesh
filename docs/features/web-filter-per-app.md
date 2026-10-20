@@ -20,6 +20,26 @@ using encrypted DNS or connecting directly to an IP address can bypass it.
 Only one Android VPN can be active at a time, so this feature conflicts with an
 existing user VPN.
 
+## Managed VPN settings
+
+Agent 1.11.5 locks user VPN configuration with the Device Owner
+`DISALLOW_CONFIG_VPN` restriction whenever web filtering is active. The agent
+sets its always-on VPN first, then applies and verifies the restriction. Turning
+web filtering off or removing the policy stops the managed VPN and removes the
+restriction. Saved configuration is reapplied after reboot or an agent update.
+
+On realme Android 12, this restriction blocks the VPN Settings page but does not
+block the disconnect popup opened from the system VPN notification. Agent 1.11.6
+also suspends the separate system VPN management package (`com.android.vpndialogs`)
+while filtering is enabled. The VPN notification remains visible. Turning filtering
+off releases this suspension reason; other app policies keep their own suspension
+reasons. Android must confirm suspension before the agent reports the web policy
+as applied. OEM notification behavior must be tested on deployed devices.
+
+This does not enable VPN lockdown: the DNS-only split tunnel still needs ordinary
+traffic to use the underlying network. It also does not prevent the encrypted-DNS
+and direct-IP bypasses described above.
+
 ## DNS reliability
 
 Agent 1.11.4 refreshes the current Internet network's DNS list for each forwarded
