@@ -69,7 +69,7 @@ class NetworkAccessActivity : ComponentActivity() {
             adminRows = (0 until all.length()).map { all.getJSONObject(it) }
         }
         CheckInWorker.scheduleNow(this)
-        status = "Đã tải trạng thái. Thiết bị đang đồng bộ chính sách."
+        status = "Đã làm mới yêu cầu và gửi lệnh đồng bộ. Xem trạng thái áp dụng ở từng yêu cầu."
     }
     private fun render() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(32, 32, 32, 32); setBackgroundColor(Color.rgb(14,17,23)) }
@@ -119,7 +119,11 @@ class NetworkAccessActivity : ComponentActivity() {
     private fun requestState(row: JSONObject, policy: WebFilterPolicy): String = when(row.optString("status")) {
         "pending" -> "Chờ admin duyệt"
         "rejected" -> "Đã từ chối · ${row.optString("decisionNote")}" 
-        "revoked" -> "Admin đã thu hồi · chờ đồng bộ nếu thiết bị chưa áp dụng"
+        "revoked" -> when (networkRevocationState(row.optInt("id"), WebFilterRuntime.applied)) {
+            NetworkRevocationState.REMOVED -> "Đã áp dụng thu hồi ngoại lệ trên thiết bị"
+            NetworkRevocationState.PENDING -> "Admin đã thu hồi · đang chờ thiết bị gỡ ngoại lệ"
+            NetworkRevocationState.UNVERIFIED -> "Admin đã thu hồi · chưa xác minh được bộ lọc đang chạy"
+        }
         "approved" -> {
             val expiry = if (row.isNull("expiresAt")) null else row.optLong("expiresAt")
             when {

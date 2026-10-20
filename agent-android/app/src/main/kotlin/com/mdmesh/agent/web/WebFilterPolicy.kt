@@ -38,3 +38,11 @@ internal object WebFilterRuntime {
     @Volatile var applied: WebFilterPolicy? = null
     @Volatile var failure: String? = null
 }
+
+/** Revocation acknowledgement is based on the running filter, not just the server decision. */
+internal enum class NetworkRevocationState { PENDING, REMOVED, UNVERIFIED }
+internal fun networkRevocationState(requestId: Int, running: WebFilterPolicy?): NetworkRevocationState = when {
+    running == null -> NetworkRevocationState.UNVERIFIED
+    running.grants.any { it.requestId == requestId } -> NetworkRevocationState.PENDING
+    else -> NetworkRevocationState.REMOVED
+}

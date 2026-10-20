@@ -44,4 +44,12 @@ class WebFilterPolicyTest {
         assertFalse(p.blocks("legacy.example.com","com.example.chat"))
         assertTrue(p.blocks("legacy.example.com","com.example.browser"))
     }
+    @Test fun `revocation changes to applied only after running filter drops that grant`() {
+        val granted = policy(grants = listOf(NetworkGrant(7, "video.example.com", listOf("com.example.chat"))))
+        assertEquals(NetworkRevocationState.PENDING, networkRevocationState(7, granted))
+        assertEquals(NetworkRevocationState.REMOVED, networkRevocationState(7, granted.copy(grants = emptyList())))
+        assertEquals(NetworkRevocationState.UNVERIFIED, networkRevocationState(7, null))
+        // Another request's grant must not make this request appear pending.
+        assertEquals(NetworkRevocationState.REMOVED, networkRevocationState(8, granted))
+    }
 }
