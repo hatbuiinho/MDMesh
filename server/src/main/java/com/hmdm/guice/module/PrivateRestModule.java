@@ -54,6 +54,7 @@ public class PrivateRestModule extends ServletModule {
         this.bind(FDroidResource.class);
         this.bind(AppUsageResource.class);
         this.bind(NetworkAccessResource.class);
+        this.bind(AppInstallResource.class);
         this.bind(com.hmdm.notification.NetworkAdminWakeHub.class).asEagerSingleton();
         // Eager so AgentWakeHub.INSTANCE is set at boot, before any device WebSocket connects.
         this.bind(com.hmdm.notification.AgentWakeHub.class).asEagerSingleton();

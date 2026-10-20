@@ -3042,4 +3042,27 @@
         </sql>
         <rollback>DROP TABLE networkAdminSubscription;</rollback>
     </changeSet>
+    <changeSet id="app-install-requests-v1" author="mdmesh">
+        <sql>
+            CREATE TABLE appInstallRequest (
+                id SERIAL PRIMARY KEY,
+                deviceNumber VARCHAR(256) NOT NULL REFERENCES devices(number) ON DELETE CASCADE,
+                configurationId INTEGER NOT NULL REFERENCES configurations(id) ON DELETE CASCADE,
+                packageName VARCHAR(255) NOT NULL,
+                appName VARCHAR(200) NOT NULL,
+                developer VARCHAR(300),
+                reason VARCHAR(1000) NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected','revoked','stale')),
+                decisionBy VARCHAR(200), decisionNote VARCHAR(1000),
+                createdAt BIGINT NOT NULL, decidedAt BIGINT, installedAt BIGINT
+            );
+            CREATE INDEX appInstallRequest_device ON appInstallRequest(deviceNumber,createdAt DESC);
+            CREATE UNIQUE INDEX appInstallRequest_open ON appInstallRequest(deviceNumber,configurationId,packageName) WHERE status IN ('pending','approved');
+            CREATE TABLE appInstallAudit (
+                id SERIAL PRIMARY KEY, requestId INTEGER NOT NULL REFERENCES appInstallRequest(id) ON DELETE CASCADE,
+                status VARCHAR(20) NOT NULL, actor VARCHAR(200), note VARCHAR(1000), createdAt BIGINT NOT NULL
+            );
+        </sql>
+        <rollback>DROP TABLE appInstallAudit; DROP TABLE appInstallRequest;</rollback>
+    </changeSet>
 </databaseChangeLog>

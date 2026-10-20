@@ -310,6 +310,12 @@ class MainActivity : AppCompatActivity() {
             }, LinearLayout.LayoutParams(MATCH, dp(48)))
         })
 
+        root.addView(card().apply {
+            addView(text("Yêu cầu cài ứng dụng", 18f, TEXT, bold = true))
+            addView(action("Tìm ứng dụng / xem yêu cầu", primary = false).apply {
+                setOnClickListener { startActivity(Intent(this@MainActivity, com.mdmesh.agent.apps.AppRequestsActivity::class.java)) }
+            }, LinearLayout.LayoutParams(MATCH, dp(48)))
+        })
         val details = column().apply { visibility = View.GONE }
         root.addView(card().apply {
             val toggle = action("Thông tin hỗ trợ  +", primary = false).apply {

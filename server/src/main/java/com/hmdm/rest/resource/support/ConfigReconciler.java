@@ -34,6 +34,7 @@ public class ConfigReconciler {
     private final AgentCommandDAO commandDAO;
     private final AppUsageDAO appUsageDAO;
     @Inject private com.hmdm.persistence.NetworkAccessDAO networkAccessDAO;
+    @Inject private com.hmdm.persistence.AppInstallDAO appInstallDAO;
 
     @Inject
     public ConfigReconciler(UnsecureDAO unsecureDAO, AgentCommandDAO commandDAO, AppUsageDAO appUsageDAO) {
@@ -51,6 +52,12 @@ public class ConfigReconciler {
         DesiredConfig doc = DesiredConfigBuilder.build(cfg, apps);
         doc.setAppUsage(appUsageDAO.desiredForDevice(cfg.getId(), device.getNumber()));
         if (networkAccessDAO != null) doc.setWebAccess(networkAccessDAO.decorate(cfg.getId(),device.getNumber(),doc.getWebAccess()));
+        if (appInstallDAO != null) appInstallDAO.invalidate(device.getNumber(), cfg.getId());
+        if (appInstallDAO != null && doc.getApplications() != null && doc.getApplications().isEnforceAllowlist()) {
+            java.util.Set<String> allowed = new java.util.TreeSet<>(doc.getApplications().getAllowedPackages());
+            allowed.addAll(appInstallDAO.grants(device.getNumber(), cfg.getId()));
+            doc.getApplications().setAllowedPackages(new java.util.ArrayList<>(allowed));
+        }
         doc.setRevision(DesiredConfigBuilder.revision(doc));
         return doc;
     }

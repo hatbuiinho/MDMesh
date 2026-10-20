@@ -116,6 +116,11 @@ public class PlayStoreResource {
     @ApiOperation("Search Google Play through Play Bridge")
     public Response search(@QueryParam("q") String query, @QueryParam("limit") Integer requestedLimit) {
         if (!SecurityContext.get().hasPermission("applications")) return Response.PERMISSION_DENIED();
+        return searchCatalog(query, requestedLimit);
+    }
+
+    // Internal entry point: callers MUST authenticate and rate-limit the device first.
+    Response searchCatalog(String query, Integer requestedLimit) {
         if (!enabled()) return Response.ERROR("error.play.disabled");
         String q = query == null ? "" : query.trim();
         if (q.length() < 2 || q.length() > 200) return Response.ERROR("error.play.query");

@@ -60,6 +60,14 @@
         tools:targetApi="35">
 
         <activity android:name=".web.AdminAccountActivity" android:exported="false" android:lockTaskMode="if_whitelisted" android:theme="@style/Theme.MdmAgent.NetworkAccess" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".apps.AppRequestsActivity" android:exported="false" android:lockTaskMode="if_whitelisted" android:theme="@style/Theme.MdmAgent.NetworkAccess" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".apps.PlayShareActivity" android:exported="true" android:label="MDMesh · Yêu cầu cài app" android:theme="@style/Theme.MdmAgent.NetworkAccess" android:lockTaskMode="if_whitelisted">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
         <activity android:name=".web.NetworkAccessActivity" android:exported="false" android:lockTaskMode="if_whitelisted" android:theme="@style/Theme.MdmAgent.NetworkAccess" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".usage.RestScheduleActivity" android:theme="@style/Theme.MdmAgent.NetworkAccess" android:exported="false" android:lockTaskMode="if_whitelisted" />
         <receiver android:name=".usage.RestScheduleReceiver" android:exported="false">

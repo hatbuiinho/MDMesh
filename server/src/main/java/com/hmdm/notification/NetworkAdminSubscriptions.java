@@ -18,6 +18,7 @@ public class NetworkAdminSubscriptions {
     private final UserMapper users;
     private final DeviceDAO devices;
     private final NetworkAccessDAO requests;
+    @Inject private AppInstallDAO appRequests;
     private final ConfigReconciler reconciler;
     @Inject public NetworkAdminSubscriptions(NetworkAdminSubscriptionMapper mapper,UserMapper users,DeviceDAO devices,NetworkAccessDAO requests,ConfigReconciler reconciler){this.mapper=mapper;this.users=users;this.devices=devices;this.requests=requests;this.reconciler=reconciler;}
     public Map<String,Object> register(String installation) {
@@ -64,7 +65,13 @@ public class NetworkAdminSubscriptions {
                 if(device==null||!Objects.equals(device.getConfigurationId(),request.getConfigurationId())||!Objects.equals(hashes.get(number),request.getPolicyHash()))continue;
                 count++;latest=Math.max(latest,request.getId());
             }
-            Map<String,Object> result=new LinkedHashMap<>();result.put("pendingCount",count);result.put("latestId",latest);return result;
+            Map<String,Object> result=new LinkedHashMap<>();result.put("pendingCount",count);result.put("latestId",latest);
+            int appCount=0, appLatest=0;
+            if(appRequests!=null)for(AppInstallRequest request:appRequests.notificationCandidates(row.getCustomerId())) {
+                Device device=null;try{device=devices.getDeviceByNumber(request.getDeviceNumber());}catch(com.hmdm.security.SecurityException ignored){}
+                if(device!=null&&Objects.equals(device.getConfigurationId(),request.getConfigurationId())){appCount++;appLatest=Math.max(appLatest,request.getId());}
+            }
+            result.put("appPendingCount",appCount);result.put("appLatestId",appLatest);return result;
         } finally {restore(previous);}
     }
     static void restore(SecurityContext previous){

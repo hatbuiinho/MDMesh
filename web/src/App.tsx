@@ -15,6 +15,7 @@ const ConfigurationsPage = lazy(() => import('./pages/ConfigurationsPage').then(
 const EnrollPage = lazy(() => import('./pages/EnrollPage').then((m) => ({ default: m.EnrollPage })));
 const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })));
 
+const AppRequestsPage = lazy(() => import('./pages/AppRequestsPage').then(m => ({ default: m.AppRequestsPage })));
 const NetworkAccessPage = lazy(() => import('./pages/NetworkAccessPage').then(m => ({ default: m.NetworkAccessPage })));
 
 export default function App() {
@@ -34,6 +35,7 @@ export default function App() {
                 <Route path="/apps" element={<AppsPage />} />
                 <Route path="/configs" element={<ConfigurationsPage />} />
                 <Route path="/enroll" element={<EnrollPage />} />
+                <Route path="/app-requests" element={<AppRequestsPage />} />
                 <Route path="/network-access" element={<NetworkAccessPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Route>

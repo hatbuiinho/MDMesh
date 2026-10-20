@@ -80,6 +80,7 @@ class NetworkAdminNotificationService : Service() {
         try {
             val data = NetworkAccessClient(this).receive(token).getJSONObject("data")
             if (!screen || account.token() != token) return@withLock
+            appNotification(data)
             val count = data.optInt("pendingCount"); val latest = data.optInt("latestId")
             val manager = getSystemService(NotificationManager::class.java)
             if (count == 0) { manager.cancel(REQUESTS_ID); return@withLock }
@@ -95,12 +96,31 @@ class NetworkAdminNotificationService : Service() {
                     .setContentTitle("MDMesh").setContentText("Có yêu cầu quản trị đang chờ").setContentIntent(openIntent()).build()).build()
             if (manager.areNotificationsEnabled()) { manager.notify(REQUESTS_ID, notification); account.notified(latest) }
         } catch (_: NetworkAccessRejected) {
-            account.clear(); getSystemService(NotificationManager::class.java).cancel(REQUESTS_ID); stopSelf()
+            account.clear(); getSystemService(NotificationManager::class.java).cancel(REQUESTS_ID); getSystemService(NotificationManager::class.java).cancel(APP_REQUESTS_ID); stopSelf()
         } catch (_: Exception) { /* Offline: reconnect or next screen-on will retry; never wake the device. */ }
+    }
+    private fun appNotification(data: org.json.JSONObject) {
+        val manager=getSystemService(NotificationManager::class.java)
+        val count=data.optInt("appPendingCount");val latest=data.optInt("appLatestId")
+        if(count==0){manager.cancel(APP_REQUESTS_ID);return}
+        val prefs=getSharedPreferences("app_request_notifications",MODE_PRIVATE)
+        val identity=java.security.MessageDigest.getInstance("SHA-256").digest((ServerConfigStore(this).baseUrl()+"|"+account.token().orEmpty()).toByteArray()).joinToString(""){"%02x".format(it)}
+        val fresh=prefs.getString("identity","")!=identity||latest>prefs.getInt("latest",0)
+        if(!fresh&&manager.activeNotifications.none{it.id==APP_REQUESTS_ID})return
+        val open=PendingIntent.getActivity(this,APP_REQUESTS_ID,Intent(this,com.mdmesh.agent.apps.AppRequestsActivity::class.java).putExtra("adminInbox",true)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val notification=NotificationCompat.Builder(this,APP_REQUESTS_CHANNEL).setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("MDMesh · Yêu cầu cài ứng dụng").setContentText("Có $count yêu cầu đang chờ duyệt")
+            .setNumber(count).setOnlyAlertOnce(!fresh).setAutoCancel(true).setContentIntent(open)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(NotificationCompat.Builder(this,APP_REQUESTS_CHANNEL).setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle("MDMesh").setContentText("Có yêu cầu quản trị đang chờ").setContentIntent(open).build()).build()
+        if(manager.areNotificationsEnabled()){manager.notify(APP_REQUESTS_ID,notification);prefs.edit().putString("identity",identity).putInt("latest",latest).apply()}
     }
     private fun channels() {
         val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= 26) {
+            manager.createNotificationChannel(NotificationChannel(APP_REQUESTS_CHANNEL,"Yêu cầu cài ứng dụng",NotificationManager.IMPORTANCE_DEFAULT))
             manager.createNotificationChannel(NotificationChannel(SERVICE_CHANNEL, "Nhận yêu cầu admin", NotificationManager.IMPORTANCE_LOW))
             manager.createNotificationChannel(NotificationChannel(REQUESTS_CHANNEL, "Yêu cầu mở truy cập mạng", NotificationManager.IMPORTANCE_DEFAULT))
         }
@@ -115,6 +135,8 @@ class NetworkAdminNotificationService : Service() {
         super.onDestroy()
     }
     companion object {
+        const val APP_REQUESTS_ID = 4013
+        private const val APP_REQUESTS_CHANNEL = "app_install_requests"
         const val REQUESTS_ID = 4012
         private const val SERVICE_ID = 4011
         private const val SERVICE_CHANNEL = "network_admin_receiver"
@@ -123,6 +145,7 @@ class NetworkAdminNotificationService : Service() {
         fun stop(context: Context) {
             context.stopService(Intent(context, NetworkAdminNotificationService::class.java))
             context.getSystemService(NotificationManager::class.java).cancel(REQUESTS_ID)
+            context.getSystemService(NotificationManager::class.java).cancel(APP_REQUESTS_ID)
         }
     }
 }

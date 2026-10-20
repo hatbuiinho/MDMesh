@@ -26,6 +26,7 @@ const NAV: NavEntry[] = [
   { to: '/dashboard', label: 'Overview', Icon: IconDashboard },
   { to: '/devices', label: 'Devices', Icon: IconDevices },
   { to: '/configs', label: 'Configurations', Icon: IconConfig },
+  { to: '/app-requests', label: 'Yêu cầu cài ứng dụng', Icon: IconConfig },
   { to: '/network-access', label: 'Truy cập mạng', Icon: IconConfig },
   { to: '/apps', label: 'Apps', Icon: IconApps },
   { to: '/enroll', label: 'Enroll', Icon: IconEnroll },
