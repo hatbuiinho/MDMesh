@@ -3243,6 +3243,19 @@ a {
   border-bottom: 1px solid var(--line-soft); background: transparent; text-align: left; cursor: pointer; width: 100%; }
 .kiosk-app:last-child { border-bottom: 0; }
 .kiosk-app:hover { background: var(--panel-2); }
+.device-apps .kiosk-app { cursor: default; -webkit-tap-highlight-color: transparent; }
+.device-apps .kiosk-app:hover, .device-apps .kiosk-app:active { background: transparent; }
+.device-apps .kiosk-applist { container-type: inline-size; }
+.device-apps .kiosk-app { display: grid; grid-template-columns: auto 32px minmax(0, 1fr) auto 32px; }
+.device-apps .kiosk-badges { flex-wrap: wrap; min-width: 0; }
+.device-apps .kiosk-badge { white-space: nowrap; }
+.device-apps .row-actions-trigger { grid-column: 5; }
+@container (max-width: 460px) {
+  .device-apps .kiosk-app { grid-template-columns: auto 32px minmax(0, 1fr) 32px; row-gap: 5px; }
+  .device-apps .kiosk-badges { grid-column: 3; grid-row: 2; }
+  .device-apps .kiosk-badges:empty { display: none; }
+  .device-apps .row-actions-trigger { grid-column: 4; grid-row: 1; }
+}
 .kiosk-app.on { background: var(--signal-dim); }
 .kiosk-ico { width: 32px; height: 32px; border-radius: 7px; flex: 0 0 auto; object-fit: cover; }
 .kiosk-ico.ph { display: inline-flex; align-items: center; justify-content: center; background: var(--panel-2);
@@ -3255,6 +3268,15 @@ a {
 .kiosk-badge { font-size: 10px; padding: 2px 6px; border-radius: 999px; background: var(--panel-2);
   color: var(--muted); border: 1px solid var(--line); }
 .kiosk-badge.sys { color: var(--warn); border-color: var(--warn); }
+.row-actions-trigger { display: inline-flex; align-items: center; justify-content: center; min-width: 32px; min-height: 32px; padding: 5px; }
+.row-actions-menu { position: fixed; z-index: 1200; min-width: 180px; max-width: calc(100vw - 16px);
+  padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2);
+  box-shadow: 0 8px 24px #0003; }
+.row-actions-menu button { display: block; width: 100%; min-height: 40px; padding: 8px 10px; border: 0;
+  border-radius: 6px; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.row-actions-menu button:hover, .row-actions-menu button:focus-visible { background: var(--panel-2); }
+.row-actions-menu button.danger { color: var(--danger); }
+.row-actions-menu button:disabled { opacity: .45; cursor: default; }
 .kiosk-badge.on { color: var(--signal-ink); background: var(--ink); border-color: var(--ink); }
 .kiosk-exit-row { display: flex; gap: 12px; margin-top: 12px; }
 .kiosk-exit-row .field { flex: 1; }

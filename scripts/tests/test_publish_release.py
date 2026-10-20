@@ -58,6 +58,7 @@ class PublishTests(unittest.TestCase):
             def do_POST(self):
                 body = self.rfile.read(int(self.headers['Content-Length']))
                 if self.path.endswith('/login'):
+                    assert json.loads(body)['login'] == 'release-admin'
                     assert json.loads(body)['password'] == hashlib.md5(b'secret').hexdigest().upper()
                     self.respond({}, cookie=True)
                 else:
@@ -75,8 +76,10 @@ class PublishTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as folder:
                 apk = Path(folder) / 'agent.apk'
                 apk.write_bytes(payload)
-                args = ['publish-release.py', '--apk', str(apk), '--base-url', f'http://127.0.0.1:{server.server_port}']
-                with patch.dict(os.environ, {'MDM_PUBLISH_PASSWORD': 'secret'}), patch.object(sys, 'argv', args), contextlib.redirect_stdout(io.StringIO()):
+                env_file = Path(folder) / '.env'
+                env_file.write_text("MDM_PUBLISH_USERNAME=release-admin\nMDM_PUBLISH_PASSWORD='secret'\n")
+                args = ['publish-release.py', '--env-file', str(env_file), '--apk', str(apk), '--base-url', f'http://127.0.0.1:{server.server_port}']
+                with patch.dict(os.environ, {k: v for k, v in os.environ.items() if not k.startswith('MDM_PUBLISH_')}, clear=True), patch.object(sys, 'argv', args), contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(publish.main(), 0)
                     self.assertEqual(publish.main(), 0)
                 self.assertEqual(len(uploads), 1)

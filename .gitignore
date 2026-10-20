@@ -63,6 +63,10 @@ reference/hmdm-android/
 .env.*.local
 
 # OS / editor / build cruft
+# Python bytecode caches
+__pycache__/
+*.py[cod]
+
 .DS_Store
 Thumbs.db
 *.log

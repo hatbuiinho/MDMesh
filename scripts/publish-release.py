@@ -100,8 +100,8 @@ def main():
             raise ValueError('Provide a valid --base-url or MDM_BASE_URL.')
         if parsed.scheme == 'http' and parsed.hostname not in ('localhost', '127.0.0.1', '::1'):
             raise ValueError('Use HTTPS for a remote server.')
-        username = args.username or os.environ.get('MDM_PUBLISH_USERNAME', 'admin')
-        password = os.environ.get('MDM_PUBLISH_PASSWORD')
+        username = args.username or setting('MDM_PUBLISH_USERNAME') or 'admin'
+        password = setting('MDM_PUBLISH_PASSWORD') or None
         if password is None:
             if not sys.stdin.isatty():
                 raise ValueError('Set MDM_PUBLISH_PASSWORD for non-interactive publishing.')

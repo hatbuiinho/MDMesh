@@ -3,12 +3,12 @@ services:
   server:
     image: mdmesh-server:${LOCAL_BUILD_TAG:-web-app-scope-20261017}
   caddy:
-    image: mdmesh-web:${WEB_BUILD_TAG:-play-search-vi-20261018}
+    image: mdmesh-web:${WEB_BUILD_TAG:-release-1031-20261020}
     environment:
       MDM_SERVER_UPSTREAM: mdmesh-server-internal:8080
     build:
       args:
-        VITE_APP_VERSION: ${WEB_BUILD_TAG:-play-search-vi-20261018}
+        VITE_APP_VERSION: ${WEB_BUILD_TAG:-release-1031-20261020}
   supervisor:
     environment:
       APPLY_SUPPORTED: "0"
