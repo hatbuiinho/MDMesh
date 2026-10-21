@@ -36,7 +36,9 @@ class AdminAccountActivity:AppCompatActivity() {
         fun line(value:String,size:Float=14f){body.addView(TextView(this).apply{text=value;textSize=size;setTextColor(getColor(R.color.network_on_surface));setPadding(0,0,0,AgentUi.dp(this@AdminAccountActivity,16))})}
         if(client.isAdmin()) {
             line(client.accountName,22f)
-            line("Đã đăng nhập · dùng chung trên tất cả màn hình Agent. Phiên được giữ khi quay về màn hình chính hoặc mở lại ứng dụng, đến khi đăng xuất hoặc server hết hạn phiên.")
+            line("Dùng chung tài khoản trên tất cả màn hình Agent.")
+            if(client.refreshExpiresAt>System.currentTimeMillis())line("Tự gia hạn đăng nhập đến "+java.time.Instant.ofEpochMilli(client.refreshExpiresAt).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))+". Đăng xuất sẽ thu hồi phiên trên máy này.")
+            else line("Phiên hiện tại chưa có tự gia hạn. Đăng nhập lại sau khi máy chủ hỗ trợ refresh token.")
             val account=NetworkAdminAccount(this)
             body.addView(MaterialSwitch(this).apply {
                 text="Nhận yêu cầu khi bật màn hình";isChecked=account.token()!=null;isEnabled=!busy

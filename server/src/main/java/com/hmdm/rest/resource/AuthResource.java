@@ -57,6 +57,7 @@ import java.util.Base64;
 @Path( "/public/auth" )
 public class AuthResource {
 
+    @Inject private com.hmdm.persistence.AgentAdminSessionDAO agentAdminSessions;
     private UnsecureDAO userDAO;
     private CustomerDAO customerDAO;
     private UnsecureDAO settingsDAO;
@@ -146,6 +147,9 @@ public class AuthResource {
             });
 
             HttpSession userSession = req.getSession();
+            Object previousFamily=userSession.getAttribute(com.hmdm.persistence.AgentAdminSessionDAO.SESSION_ATTRIBUTE);
+            if(previousFamily instanceof String && agentAdminSessions!=null)agentAdminSessions.revokeFamily((String)previousFamily);
+            userSession.removeAttribute(com.hmdm.persistence.AgentAdminSessionDAO.SESSION_ATTRIBUTE);
             userSession.setAttribute(AuthFilter.sessionCredentials, user );
 
             Settings settings = settingsDAO.getSettings(user.getCustomerId());
@@ -184,6 +188,8 @@ public class AuthResource {
     public void logout( @Context HttpServletRequest req ) {
         HttpSession session = req.getSession( false );
         if ( session != null ) {
+            Object family=session.getAttribute(com.hmdm.persistence.AgentAdminSessionDAO.SESSION_ATTRIBUTE);
+            if(family instanceof String && agentAdminSessions!=null)agentAdminSessions.revokeFamily((String)family);
             session.invalidate();
         }
     }

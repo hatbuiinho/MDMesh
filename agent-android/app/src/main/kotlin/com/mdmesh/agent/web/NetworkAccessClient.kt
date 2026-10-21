@@ -6,6 +6,8 @@ import com.mdmesh.core.config.ServerConfigStore
 import com.mdmesh.core.store.DeviceIdStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -40,20 +42,71 @@ internal class NetworkAccessClient(private val context: Context) {
         val user = result.optJSONObject("data") ?: error("Không đăng nhập được")
         if (user.optBoolean("twoFactor") || user.optBoolean("passwordReset")) { invalidate(result.optString("_sessionCookie"),server); error("Tài khoản cần xác minh thêm. Hãy duyệt từ dashboard.") }
         val name=user.optString("name").takeIf { it.isNotBlank() && it != "null" } ?: user.optString("login", username)
-        session.save(generation,result.getString("_sessionCookie"),name,server)
+        val cookie=result.getString("_sessionCookie")
+        // Old servers may not offer refresh yet. Preserve their valid cookie without storing a password.
+        val registered=try { call("/public/agent-admin-session/register",JSONObject().put("installationId",session.installation()),captureCookie=true,sessionCookie=cookie,expectedServer=server) }
+            catch(e:NetworkHttpError){if(e.code==404)null else {invalidate(cookie,server);throw e}}
+        val data=registered?.optJSONObject("data")
+        val currentCookie=registered?.optString("_sessionCookie")?.takeIf{it.isNotBlank()} ?: cookie
+        try {
+            session.save(generation,currentCookie,name,server,data?.optString("refreshToken").orEmpty(),data?.optLong("refreshExpiresAt") ?: 0,data?.optLong("accessExpiresAt") ?: 0)
+        } catch(e:Exception){
+            data?.optString("refreshToken")?.takeIf{it.isNotEmpty()}?.let{revoke(it,server)}
+            invalidate(currentCookie,server);throw e
+        }
     }
     suspend fun receive(token: String, revoke: Boolean = false): JSONObject = call(
         "/public/network-access-notifications" + if (revoke) "/revoke" else "",
         if (revoke) JSONObject() else null, "Bearer $token",
     )
     fun isAdmin() = session.snapshot().cookie.isNotEmpty()
-    suspend fun admin(path: String, body: JSONObject? = null): JSONObject {
-        check(isAdmin()) { "Phiên admin đã khóa. Đăng nhập lại." }
-        val state=session.snapshot()
-        return call(path, body, sessionCookie = state.cookie, expectedServer=state.server)
+    val refreshExpiresAt:Long get()=session.snapshot().refreshExpiresAt
+    suspend fun admin(path: String, body: JSONObject? = null): JSONObject = AdminSessionRecovery(
+        session::snapshot,session::clearIf,::renew,::validCookie,authMutex,::maybeUpgrade,
+    ).run { state -> call(path,body,sessionCookie=state.cookie,expectedServer=state.server) }
+    private suspend fun maybeUpgrade(state:AdminSessionStore.Snapshot):AdminSessionStore.Snapshot {
+        if(state.refreshToken.isNotEmpty() || upgradeServer==state.server && System.currentTimeMillis()<upgradeAfter)return state
+        val result=try {
+            call("/public/agent-admin-session/register",JSONObject().put("installationId",session.installation()),captureCookie=true,sessionCookie=state.cookie,expectedServer=state.server)
+        } catch(e:NetworkHttpError){
+            when(e.code){404->{upgradeServer=state.server;upgradeAfter=System.currentTimeMillis()+300000;return state};401->{session.clearIf(state.cookie);error("Phiên admin đã hết hạn. Đăng nhập lại.")};else->throw e}
+        }
+        val data=result.getJSONObject("data");val cookie=result.getString("_sessionCookie");val refresh=data.getString("refreshToken")
+        try{session.save(state.generation,cookie,state.name,state.server,refresh,data.getLong("refreshExpiresAt"),data.getLong("accessExpiresAt"))}
+        catch(e:Exception){revoke(refresh,state.server);invalidate(cookie,state.server);throw e}
+        return session.snapshot()
+    }
+    private suspend fun validCookie(state:AdminSessionStore.Snapshot):Boolean = try {
+        call("/public/agent-admin-session/status",sessionCookie=state.cookie,expectedServer=state.server)
+        true
+    } catch(e:NetworkHttpError) {
+        when(e.code){401->false;404->true;else->throw e}
+    }
+    private suspend fun renew(state:AdminSessionStore.Snapshot):AdminSessionStore.Snapshot {
+        check(session.snapshot().generation==state.generation){"Phiên đăng nhập đã thay đổi."}
+        val result=try {
+            call("/public/agent-admin-session/refresh",JSONObject(),bearer="Bearer ${state.refreshToken}",captureCookie=true,expectedServer=state.server)
+        } catch(e:NetworkHttpError){
+            if(e.code in setOf(401,403))session.clearIf(state.cookie)
+            throw e
+        }
+        val data=result.getJSONObject("data")
+        val cookie=result.getString("_sessionCookie")
+        val refresh=data.getString("refreshToken")
+        try {
+            session.save(state.generation,cookie,state.name,state.server,refresh,data.getLong("refreshExpiresAt"),data.getLong("accessExpiresAt"))
+        } catch(e:Exception){revoke(refresh,state.server);invalidate(cookie,state.server);throw e}
+        return session.snapshot()
     }
     fun clearSession(): String = session.clear()
-    suspend fun logout() { val state=session.snapshot();clearSession();if(state.cookie.isNotEmpty())runCatching {call("/public/auth/logout",JSONObject(),sessionCookie=state.cookie,expectedServer=state.server)} }
+    suspend fun logout() {
+        val state=session.snapshot();session.clear()
+        authMutex.withLock {
+            if(state.refreshToken.isNotEmpty())revoke(state.refreshToken,state.server)
+            if(state.cookie.isNotEmpty())invalidate(state.cookie,state.server)
+        }
+    }
+    private suspend fun revoke(token:String,server:String){runCatching{call("/public/agent-admin-session/revoke",JSONObject(),bearer="Bearer $token",expectedServer=server)}}
     private suspend fun invalidate(previous: String,server:String) { if (previous.isNotEmpty()) runCatching { call("/public/auth/logout", JSONObject(), sessionCookie = previous,expectedServer=server) } }
     private suspend fun call(path: String, body: JSONObject? = null, bearer: String? = null, captureCookie: Boolean = false, sessionCookie: String = "", expectedServer:String?=null): JSONObject = withContext(Dispatchers.IO) {
         val base = ServerConfigStore(context).baseUrl()
@@ -69,18 +122,16 @@ internal class NetworkAccessClient(private val context: Context) {
                 conn.requestMethod = "POST"; conn.doOutput = true; conn.setRequestProperty("Content-Type", "application/json")
                 conn.outputStream.use { it.write(body.toString().toByteArray()) }
             }
-            if(conn.responseCode in setOf(401,403)&&sessionCookie.isNotEmpty()) {
-                session.clearIf(sessionCookie)
-                error("Phiên admin đã hết hạn. Đăng nhập lại từ Tài khoản quản trị.")
-            }
-            check(conn.responseCode in 200..299) { "Server trả mã ${conn.responseCode}" }
+            if(conn.responseCode !in 200..299)throw NetworkHttpError(conn.responseCode)
             val text = conn.inputStream.bufferedReader().use { it.readText() }
-            val result = JSONObject(text)
+            val result = if(text.isBlank())JSONObject().put("status","OK") else JSONObject(text)
             if (result.optString("status") != "OK") throw NetworkAccessRejected(result.optString("message").takeUnless { it.isBlank() || it == "null" } ?: "Không được phép hoặc yêu cầu không hợp lệ.")
             if(captureCookie)result.put("_sessionCookie",conn.headerFields.filterKeys { it?.equals("Set-Cookie",true)==true }.values.flatten().map { it.substringBefore(';') }.joinToString("; "))
             result
         } finally { conn.disconnect() }
     }
+    companion object { private val authMutex=Mutex();private var upgradeServer="";private var upgradeAfter=0L }
 }
 
+internal class NetworkHttpError(val code:Int):Exception("Server trả mã $code")
 internal class NetworkAccessRejected(message: String) : Exception(message)

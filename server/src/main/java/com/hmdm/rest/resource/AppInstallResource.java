@@ -37,6 +37,9 @@ public class AppInstallResource {
         r.setDecisionBy(SecurityContext.get().getCurrentUserName());r.setDecisionNote(body.note);r.setDecidedAt(System.currentTimeMillis());
         if(dao.decide(r,expected)!=1)return Response.ERROR("Yêu cầu đã thay đổi. Hãy làm mới.");
         push.notifyDevicesOnUpdate(d.getConfigurationId());
+        // A wake carries no grant: the enrolled device fetches its own authoritative requests.
+        if (com.hmdm.notification.AgentWakeHub.INSTANCE != null)
+            com.hmdm.notification.AgentWakeHub.INSTANCE.wake(d.getNumber(), "commands");
         return Response.OK(r);
     }
 }

@@ -45,6 +45,7 @@ public class AuthFilter implements Filter {
     public static final String twoFactorNeeded = "twofactor";
 
     private UserDAO userDAO;
+    @Inject private com.hmdm.persistence.AgentAdminSessionDAO agentAdminSessions;
 
     public AuthFilter() {
     }
@@ -106,6 +107,11 @@ public class AuthFilter implements Filter {
             User dbUser = userDAO.getUserDetails(currentUser.getId());
             if (dbUser.isPasswordReset() || dbUser.getAuthToken() == null || currentUser.getAuthToken() == null ||
                     !currentUser.getAuthToken().equals(dbUser.getAuthToken())) {
+                ((HttpServletResponse)servletResponse).sendError(403);
+                return;
+            }
+            Object family = ((HttpServletRequest)servletRequest).getSession(false).getAttribute(com.hmdm.persistence.AgentAdminSessionDAO.SESSION_ATTRIBUTE);
+            if (family != null && (!(family instanceof String) || agentAdminSessions == null || !agentAdminSessions.active((String)family, dbUser))) {
                 ((HttpServletResponse)servletResponse).sendError(403);
                 return;
             }

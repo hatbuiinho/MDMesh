@@ -22,5 +22,22 @@ public class AppInstallAuthorizationTest {
     @Test public void inaccessibleDeviceCannotBeApproved(){when(devices.getDeviceByNumber("a")).thenReturn(null);assertEquals(Response.PERMISSION_DENIED().getStatus(),resource.decide(1,decision("approve")).getStatus());verify(dao,never()).decide(any(),anyString());}
     @Test public void changedConfigurationRequiresNewRequest(){device.setConfigurationId(2);assertEquals(Response.ResponseStatus.ERROR,resource.decide(1,decision("approve")).getStatus());verify(dao,never()).decide(any(),anyString());}
     @Test public void approvalAndRevocationUseCompareAndSetTransitions(){assertEquals(Response.ResponseStatus.OK,resource.decide(1,decision("approve")).getStatus());assertEquals("approved",row.getStatus());verify(dao).decide(row,"pending");assertEquals(Response.ResponseStatus.OK,resource.decide(1,decision("revoke")).getStatus());assertEquals("revoked",row.getStatus());verify(dao).decide(row,"approved");verify(push,times(2)).notifyDevicesOnUpdate(1);}
+    @Test public void decisionWakesOnlyTheRequestingDevice() {
+        com.hmdm.notification.AgentWakeHub previous=com.hmdm.notification.AgentWakeHub.INSTANCE;
+        com.hmdm.notification.AgentWakeHub hub=mock(com.hmdm.notification.AgentWakeHub.class);
+        try {
+            com.hmdm.notification.AgentWakeHub.INSTANCE=hub;
+            assertEquals(Response.ResponseStatus.OK,resource.decide(1,decision("approve")).getStatus());
+            verify(hub).wake("a","commands");verifyNoMoreInteractions(hub);
+        } finally {com.hmdm.notification.AgentWakeHub.INSTANCE=previous;}
+    }
+    @Test public void failedDecisionNeverWakesDevice() {
+        com.hmdm.notification.AgentWakeHub previous=com.hmdm.notification.AgentWakeHub.INSTANCE;
+        com.hmdm.notification.AgentWakeHub hub=mock(com.hmdm.notification.AgentWakeHub.class);
+        try {
+            com.hmdm.notification.AgentWakeHub.INSTANCE=hub;when(dao.decide(any(),anyString())).thenReturn(0);
+            resource.decide(1,decision("approve"));verifyNoInteractions(hub);
+        } finally {com.hmdm.notification.AgentWakeHub.INSTANCE=previous;}
+    }
     @Test public void concurrentDecisionDoesNotPushFailedUpdate(){when(dao.decide(any(),anyString())).thenReturn(0);assertEquals(Response.ResponseStatus.ERROR,resource.decide(1,decision("approve")).getStatus());verifyNoInteractions(push);}
 }

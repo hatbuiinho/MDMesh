@@ -28,3 +28,37 @@ Quyền duyệt hiện có hiệu lực đến khi thu hồi hoặc đổi cấu
 Cần triển khai cùng server (Liquibase tạo `appInstallRequest`/`appInstallAudit`), web và APK Agent chứa màn hình/receiver mới. Agent cũ không có hai lối vào mới. Tìm kiếm cần cấu hình PLAY_STORE_ENABLED/bridge/dispenser hoạt động; chia sẻ link vẫn có thể gửi với tên dự phòng nếu bridge chưa có metadata, nhưng cần thiết bị đã enrollment và kết nối HTTPS tới server.
 
 Kiểm tra trên thiết bị có Google Play: tìm Zalo trong Agent → chọn → lý do → gửi; chia sẻ cùng app từ Google Play → không tạo yêu cầu trùng; admin duyệt từ Agent/web → user làm mới → mở đúng trang; cài và quay lại → báo đã cài. Kiểm tra từ chối, thu hồi trước khi mở, offline, đổi cấu hình, app không tương thích/quốc gia khác, Google Play bị ẩn/kiosk chặn, link giả và nhiều link khác app. Không dùng kết quả bridge như bằng chứng app cài được trên thiết bị.
+
+## Device approval notifications
+
+Device notifications are independent of admin login. A successful decision wakes
+only the requesting agent through AgentWakeHub (the existing `commands` wake); the payload has
+no grant or app metadata. The agent retrieves its device-authenticated request
+list and posts one notification for each approved, uninstalled request. Device
+responses include all such outstanding approvals plus the latest 100 requests,
+so older actionable approvals do not disappear behind newer history.
+
+The existing device service schedules sync on wake, screen-on, startup and every
+30 seconds while interactive. WorkManager supplies a network-constrained
+15-minute periodic fallback; Android may defer it while idle. Reconnection also
+resumes the existing wake channel. This is eventual delivery, not a guaranteed
+notification while an offline or sleeping device is unreachable.
+
+Notification actions enter the private AppRequestsActivity with a server/device
+scope and request ID. The activity checks scope and fetches current approval
+before opening the exact Google Play page. It never opens Play automatically
+when a decision arrives. Revoked, stale, installed or missing requests remove
+existing notifications on the next successful sync. Package-added events remove
+the matching notification locally and schedule an installed report.
+
+Successfully posted request IDs are persisted per enrollment/server scope to
+avoid repeated alerts after dismissal, polling or process restart. Disabled app
+or channel notifications are not marked delivered; the home screen still shows
+the cached count of approved apps awaiting installation. Sync updates that count
+regardless of notification permission. No admin credentials are used or saved
+by this flow.
+
+Deploy both the server changes (targeted wake and outstanding approvals query)
+and an updated Agent APK for the full behavior. An older server still works
+through Agent polling, with its existing history-limit restriction. No release
+or publication is performed as part of implementing this feature.

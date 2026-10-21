@@ -17,6 +17,19 @@ import com.mdmesh.agent.web.AdminAccountActivity
 
 /** Shared visual primitives for the Agent; keep role and screen content independent. */
 internal object AgentUi {
+    fun requestDeviceText(row: org.json.JSONObject): String {
+        return "Thiết bị yêu cầu: ${requestDeviceLabel(row.optString("deviceName"), row.optString("deviceNumber"))}"
+    }
+    fun requestDevice(body: LinearLayout, row: org.json.JSONObject) {
+        body.addView(android.widget.TextView(body.context).apply {
+            text = requestDeviceText(row)
+            textSize = 16f
+            setTextColor(body.context.getColor(R.color.network_on_surface))
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(0, dp(body.context, 8), 0, dp(body.context, 16))
+            setTextIsSelectable(true)
+        })
+    }
     fun dp(context:Context,value:Int)=(value*context.resources.displayMetrics.density).toInt()
     fun toolbar(activity:Activity,title:String,back:Boolean=true,account:Boolean=true)=MaterialToolbar(activity).apply {
         this.title=title;setTitleTextColor(activity.getColor(R.color.network_on_surface))

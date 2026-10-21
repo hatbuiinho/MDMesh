@@ -65,6 +65,7 @@ class MainActivity : AppCompatActivity() {
     @Inject lateinit var appUsage: com.mdmesh.core.usage.AppUsageManager
     private lateinit var accountSummary: TextView
     private lateinit var restCard: TextView
+    private lateinit var approvedAppsSummary: TextView
 
     private lateinit var deviceIdValue: TextView
     private lateinit var statusTitle: TextView
@@ -134,6 +135,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refresh() {
+        if (::approvedAppsSummary.isInitialized) lifecycleScope.launch {
+            val count = com.mdmesh.agent.apps.AppApprovalNotifications.count(this@MainActivity)
+            approvedAppsSummary.text = "$count ứng dụng đã duyệt · Chưa cài"
+            approvedAppsSummary.visibility = if (count > 0) View.VISIBLE else View.GONE
+        }
         if(::accountSummary.isInitialized){val client=NetworkAccessClient(applicationContext);accountSummary.text=if(client.isAdmin())"Quản trị: ${client.accountName}" else "Quản lý thiết bị"}
         lifecycleScope.launch {
             val id = deviceIdStore.current()
@@ -312,6 +318,11 @@ class MainActivity : AppCompatActivity() {
 
         root.addView(card().apply {
             addView(text("Yêu cầu cài ứng dụng", 18f, TEXT, bold = true))
+            approvedAppsSummary = text("", 14f, MUTED).apply {
+                visibility = View.GONE
+                setPadding(0, dp(8), 0, 0)
+            }
+            addView(approvedAppsSummary)
             addView(action("Tìm ứng dụng / xem yêu cầu", primary = false).apply {
                 setOnClickListener { startActivity(Intent(this@MainActivity, com.mdmesh.agent.apps.AppRequestsActivity::class.java)) }
             }, LinearLayout.LayoutParams(MATCH, dp(48)))

@@ -16,28 +16,32 @@ import javax.crypto.spec.GCMParameterSpec
 internal class AdminSessionStore private constructor(context:Context) {
     private val app=context.applicationContext
     private val prefs=app.getSharedPreferences("admin_session",Context.MODE_PRIVATE)
-    data class Snapshot(val cookie:String="",val name:String="",val server:String="")
+    data class Snapshot(val cookie:String="",val name:String="",val server:String="",val refreshToken:String="",val refreshExpiresAt:Long=0,val accessExpiresAt:Long=0,val generation:Int=0)
     private var value=runCatching {
         val data=prefs.getString("data",null) ?: return@runCatching Snapshot()
         val iv=prefs.getString("iv",null) ?: return@runCatching Snapshot()
         val cipher=Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE,key(),GCMParameterSpec(128,Base64.decode(iv,Base64.NO_WRAP)))
         val json=JSONObject(String(cipher.doFinal(Base64.decode(data,Base64.NO_WRAP)),Charsets.UTF_8))
-        Snapshot(json.getString("cookie"),json.getString("name"),json.getString("server"))
+        Snapshot(json.getString("cookie"),json.getString("name"),json.getString("server"),json.optString("refreshToken"),json.optLong("refreshExpiresAt"),json.optLong("accessExpiresAt"))
     }.getOrDefault(Snapshot())
     private var generation=0
     @Synchronized fun snapshot():Snapshot {
         if(value.cookie.isNotEmpty()&&value.server!=ServerConfigStore(app).baseUrl())clear()
-        return value
+        return value.copy(generation=generation)
+    }
+    fun installation():String = synchronized(this) {
+        val settings=app.getSharedPreferences("admin_installation",Context.MODE_PRIVATE)
+        settings.getString("id",null) ?: java.util.UUID.randomUUID().toString().also { check(settings.edit().putString("id",it).commit()) }
     }
     @Synchronized fun beginLogin():Int { clear();return generation }
-    @Synchronized fun save(expected:Int,cookie:String,name:String,server:String) {
+    @Synchronized fun save(expected:Int,cookie:String,name:String,server:String,refreshToken:String="",refreshExpiresAt:Long=0,accessExpiresAt:Long=0) {
         check(expected==generation&&server==ServerConfigStore(app).baseUrl()){ "Phiên đăng nhập đã đóng hoặc máy chủ đã thay đổi." }
         check(cookie.isNotBlank()){ "Server không cấp phiên đăng nhập." }
         val cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.ENCRYPT_MODE,key())
-        val data=JSONObject().put("cookie",cookie).put("name",name).put("server",server).toString()
+        val data=JSONObject().put("cookie",cookie).put("name",name).put("server",server).put("refreshToken",refreshToken).put("refreshExpiresAt",refreshExpiresAt).put("accessExpiresAt",accessExpiresAt).toString()
         check(prefs.edit().putString("data",Base64.encodeToString(cipher.doFinal(data.toByteArray()),Base64.NO_WRAP)).putString("iv",Base64.encodeToString(cipher.iv,Base64.NO_WRAP)).commit())
-        value=Snapshot(cookie,name,server)
+        value=Snapshot(cookie,name,server,refreshToken,refreshExpiresAt,accessExpiresAt)
     }
     @Synchronized fun clearIf(cookie:String) { if(value.cookie==cookie)clear() }
     @Synchronized fun clear():String {

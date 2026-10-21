@@ -208,7 +208,7 @@ class NetworkAccessActivity : AppCompatActivity() {
             val pkg=row.optString("packageName")
             content.addView(ImageView(this).apply { setImageDrawable(runCatching { packageManager.getApplicationIcon(pkg) }.getOrElse { getDrawable(android.R.drawable.sym_def_app_icon) });contentDescription=label(pkg) },LinearLayout.LayoutParams(dp(40),dp(40)))
             content.addView(TextView(this).apply {
-                text="${label(pkg)}\n${row.optString("domain")}\n${if(event) "${row.optLong("count")} lượt · ${time(row.optLong("lastAt"))}" else if(adminMode) "${row.optString("deviceName",row.optString("deviceNumber"))} · ${adminState(row)}" else requestState(row,policy)}"
+                text="${label(pkg)}\n${row.optString("domain")}\n${if(event) "${row.optLong("count")} lượt · ${time(row.optLong("lastAt"))}" else if(adminMode) "${com.mdmesh.agent.ui.requestDeviceLabel(row.optString("deviceName"),row.optString("deviceNumber"))} · ${adminState(row)}" else requestState(row,policy)}"
                 textSize=14f;setPadding(dp(12),0,0,0);maxLines=4;ellipsize=android.text.TextUtils.TruncateAt.END
             },LinearLayout.LayoutParams(0,-2,1f));card.addView(content)
             rowsView.addView(card,LinearLayout.LayoutParams(-1,-2).apply { bottomMargin=dp(8) })
@@ -231,6 +231,7 @@ class NetworkAccessActivity : AppCompatActivity() {
         "revoked"->"Đã thu hồi";"rejected"->"Đã từ chối";"stale"->"Chính sách đã thay đổi";"expired"->"Đã hết hạn";else->"Chưa xác định"
     }
     private fun details(row:JSONObject,event:Boolean)=sheet(row.optString("domain")) { body,dialog ->
+        if (!event) com.mdmesh.agent.ui.AgentUi.requestDevice(body, row)
         body.addView(TextView(this).apply { text="${label(row.optString("packageName"))}\n${if(event) "${row.optLong("count")} lượt · ${time(row.optLong("lastAt"))}" else if(adminMode) adminState(row) else requestState(row,WebFilterConfig.load(this@NetworkAccessActivity))}\n${row.optString("reason")}\n${row.optString("decisionNote")}";textSize=16f })
         fun action(title:String,primary:Boolean=true,click:()->Unit){body.addView(actionButton(title,primary).apply{setOnClickListener{dialog.dismiss();click()}})}
         if(event){
@@ -276,6 +277,7 @@ class NetworkAccessActivity : AppCompatActivity() {
         perform {
             val config=runCatching { client.admin("/private/network-access/configuration/${row.getInt("configurationId")}").optJSONArray("data") }.getOrNull() ?: JSONArray()
             sheet("Mở ${row.optString("domain")}") { body,dialog ->
+                com.mdmesh.agent.ui.AgentUi.requestDevice(body, row)
                 val pkg=row.optString("packageName")
                 val scopes=mutableListOf<Pair<String,String>>()
                 if(pkg.isNotBlank())scopes+="APP" to "Ứng dụng: ${label(pkg)}" else scopes+="" to "Chọn phạm vi"
@@ -303,7 +305,7 @@ class NetworkAccessActivity : AppCompatActivity() {
     }
     private fun decisionNote(row:JSONObject, action:String) {
         val note=EditText(this).apply { hint="Ghi chú";filters=arrayOf(android.text.InputFilter.LengthFilter(1000)) }
-        MaterialAlertDialogBuilder(this).setTitle(if(action=="reject")"Từ chối yêu cầu" else "Thu hồi ngoại lệ").setView(note).setNegativeButton("Hủy",null).setPositiveButton("Xác nhận") { _,_->submit(row,JSONObject().put("action",action).put("note",note.text.toString())) }.show()
+        MaterialAlertDialogBuilder(this).setTitle(if(action=="reject")"Từ chối yêu cầu" else "Thu hồi ngoại lệ").setMessage(com.mdmesh.agent.ui.AgentUi.requestDeviceText(row)).setView(note).setNegativeButton("Hủy",null).setPositiveButton("Xác nhận") { _,_->submit(row,JSONObject().put("action",action).put("note",note.text.toString())) }.show()
     }
     private fun submit(row:JSONObject, payload:JSONObject)=perform {
         client.admin("/private/network-access/requests/${row.getInt("id")}/decision",payload)

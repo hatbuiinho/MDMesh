@@ -3065,4 +3065,24 @@
         </sql>
         <rollback>DROP TABLE appInstallAudit; DROP TABLE appInstallRequest;</rollback>
     </changeSet>
+    <changeSet id="agent-admin-refresh-sessions-v1" author="mdmesh">
+        <sql>
+            CREATE TABLE agentAdminRefreshSession (
+                id VARCHAR(36) PRIMARY KEY,
+                userId INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                customerId INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+                installationId VARCHAR(64) NOT NULL,
+                credentialVersion VARCHAR(64) NOT NULL,
+                expiresAt BIGINT NOT NULL, revokedAt BIGINT,
+                UNIQUE(userId,installationId)
+            );
+            CREATE TABLE agentAdminRefreshToken (
+                tokenHash VARCHAR(64) PRIMARY KEY,
+                sessionId VARCHAR(36) NOT NULL REFERENCES agentAdminRefreshSession(id) ON DELETE CASCADE,
+                createdAt BIGINT NOT NULL, usedAt BIGINT
+            );
+            CREATE INDEX agentAdminRefreshToken_session ON agentAdminRefreshToken(sessionId);
+        </sql>
+        <rollback>DROP TABLE agentAdminRefreshToken; DROP TABLE agentAdminRefreshSession;</rollback>
+    </changeSet>
 </databaseChangeLog>

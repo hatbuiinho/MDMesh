@@ -19,7 +19,7 @@ public interface NetworkAccessMapper {
     List<NetworkAccessRequest> notificationCandidates(int customer);
     @Select("SELECT * FROM networkAccessRequest WHERE id=#{id}")
     NetworkAccessRequest get(int id);
-    @Select("SELECT * FROM networkAccessRequest WHERE deviceNumber=#{device} ORDER BY createdAt DESC,id DESC LIMIT 100")
+    @Select("SELECT r.*,COALESCE(NULLIF(d.description,''),d.number) AS deviceName FROM networkAccessRequest r JOIN devices d ON d.number=r.deviceNumber WHERE r.deviceNumber=#{device} ORDER BY r.createdAt DESC,r.id DESC LIMIT 100")
     List<NetworkAccessRequest> deviceRequests(String device);
     @Select("SELECT number FROM devices WHERE number=#{device} FOR UPDATE")
     String lockDevice(String device);

@@ -72,6 +72,7 @@ class CheckInService : LifecycleService() {
                 Intent.ACTION_BATTERY_LOW ->
                     runCatching { eventLog.record(EventType.LOW_BATTERY) }
                 Intent.ACTION_SCREEN_ON -> lifecycleScope.launch {
+                    com.mdmesh.agent.apps.AppApprovalSyncWorker.now(this@CheckInService)
                     runCatching { configApplier.reapplyApplicationAllowlist() }
                         .onFailure { Log.w(TAG, "screen-on allowlist reconciliation failed", it) }
                 }
@@ -99,11 +100,13 @@ class CheckInService : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         startAsForeground()
+        com.mdmesh.agent.apps.AppApprovalSyncWorker.now(this)
         if (!started) {
             started = true
             lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 while (true) {
                     runCatching { appUsage.evaluateAndReport() }.onFailure { Log.w(TAG, "Local app policy evaluation failed", it) }
+                    if (isInteractive()) com.mdmesh.agent.apps.AppApprovalSyncWorker.now(this@CheckInService)
                     delay(30_000L)
                 }
             }
@@ -154,6 +157,7 @@ class CheckInService : LifecycleService() {
     private suspend fun onWake(signal: WakeSignal) {
         runCatching { configApplier.reapplyApplicationAllowlist() }
             .onFailure { Log.w(TAG, "local config reconciliation failed", it) }
+        com.mdmesh.agent.apps.AppApprovalSyncWorker.now(this)
         when (signal.kind) {
             "interactive" -> {
                 interactiveUntil = System.currentTimeMillis() + (signal.ttlSec ?: 120) * 1000L

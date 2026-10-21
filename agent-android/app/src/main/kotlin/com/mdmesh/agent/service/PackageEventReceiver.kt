@@ -24,6 +24,7 @@ class PackageEventReceiver : BroadcastReceiver() {
         val replacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)
         when (intent.action) {
             Intent.ACTION_PACKAGE_ADDED -> {
+                if (pkg != null) com.mdmesh.agent.apps.AppApprovalNotifications.installed(context, pkg)
                 if (!replacing) runCatching { EventLog(context).record(EventType.APP_INSTALLED, pkg) }
                 // Enforce both fresh installs and replacements. Play Store/OEM restore flows can
                 // report an app as EXTRA_REPLACING when the package existed previously (including
@@ -45,6 +46,7 @@ class PackageEventReceiver : BroadcastReceiver() {
             Intent.ACTION_PACKAGE_REMOVED ->
                 if (!replacing) runCatching { EventLog(context).record(EventType.APP_UNINSTALLED, pkg) }
         }
+        runCatching { com.mdmesh.agent.apps.AppApprovalSyncWorker.now(context) }
         // A newly installed launcher app must not remain usable until the next periodic check-in.
         // Removal also prunes the set of packages whose hidden state MDMesh owns.
         context.sendBroadcast(Intent(context, com.mdmesh.agent.usage.RestScheduleReceiver::class.java))
