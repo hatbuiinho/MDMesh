@@ -25,4 +25,15 @@ public class AppUsageResourceTest {
         assertNotNull(AppUsageResource.validateWindow(Arrays.asList(1,1), "22:00", "06:00"));
         assertNull(AppUsageResource.validateWindow(Arrays.asList(1), "22:00", "06:00"));
     }
+    @Test public void configurationBanUsingExistingSchedulesIsValid() {
+        DesiredAppUsage p=policy();
+        for(int i=0;i<2;i++) {
+            AppRestSchedule s=new AppRestSchedule(); s.setId("app-block:test:"+i); s.setName("Cấm YouTube");
+            s.setScope("SELECTED");s.setPackages(Arrays.asList("com.google.android.youtube"));
+            s.setDays(Arrays.asList(1,2,3,4,5,6,7));s.setFrom(i==0?"00:00":"12:00");s.setTo(i==0?"12:00":"00:00");
+            p.getSchedules().add(s);
+        }
+        assertNull(AppUsageResource.validate(p));
+        assertEquals("sleep",p.getSchedules().get(0).getId());
+    }
 }

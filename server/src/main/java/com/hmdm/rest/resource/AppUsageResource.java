@@ -58,6 +58,20 @@ public class AppUsageResource {
         return Response.OK(dao.report(customer, configurationId, from, to));
     }
 
+    @GET @Path("/summary")
+    public Response summary(@QueryParam("from") String from, @QueryParam("to") String to) {
+        Integer customer=customer();
+        if (customer==null || !SecurityContext.get().hasPermission("configurations")) return Response.PERMISSION_DENIED();
+        try {
+            LocalDate start=LocalDate.parse(from), end=LocalDate.parse(to);
+            if(end.isBefore(start) || start.plusDays(30).isBefore(end)) return Response.ERROR("Date range must be 1-31 days");
+        } catch(Exception e) { return Response.ERROR("from/to must use YYYY-MM-DD"); }
+        List<Map<String,Object>> rows=dao.summary(customer,from,to);
+        Map<Integer,Boolean> access=new HashMap<>();
+        rows.removeIf(row -> row.get("configurationId")==null || !access.computeIfAbsent(((Number)row.get("configurationId")).intValue(), this::canAccess));
+        return Response.OK(rows);
+    }
+
     /** Device-detail report. Ownership is checked before querying usage so device numbers cannot
      * be used to enumerate another tenant's data. A bounded range keeps the response predictable. */
     @GET @Path("/device/{number}/report")

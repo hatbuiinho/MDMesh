@@ -68,6 +68,7 @@ public class AppUsageDAO {
             mapper.insertPolicy(row);
         }
     }
+    public List<Map<String,Object>> summary(int customerId, String from, String to) { return mapper.summary(customerId, from, to); }
     public void upsert(DeviceAppUsageDaily row) { mapper.upsertDaily(row); }
     public List<DeviceAppUsageDaily> report(int customerId, Integer configurationId, String from, String to) { return mapper.report(customerId, configurationId, from, to); }
     public List<DeviceAppUsageDaily> reportDevice(String deviceNumber, String from, String to) { return mapper.reportDevice(deviceNumber, from, to); }

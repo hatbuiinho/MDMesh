@@ -59,6 +59,7 @@
         android:theme="@style/Theme.MdmAgent"
         tools:targetApi="35">
 
+        <activity android:name=".usage.AppUsageActivity" android:exported="false" android:theme="@style/Theme.MdmAgent.NetworkAccess" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".web.AdminAccountActivity" android:exported="false" android:lockTaskMode="if_whitelisted" android:theme="@style/Theme.MdmAgent.NetworkAccess" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".apps.AppRequestsActivity" android:exported="false" android:lockTaskMode="if_whitelisted" android:theme="@style/Theme.MdmAgent.NetworkAccess" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".apps.PlayShareActivity" android:exported="true" android:label="MDMesh · Yêu cầu cài app" android:theme="@style/Theme.MdmAgent.NetworkAccess" android:lockTaskMode="if_whitelisted">

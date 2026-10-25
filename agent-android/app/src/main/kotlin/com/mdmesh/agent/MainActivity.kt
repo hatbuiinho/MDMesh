@@ -80,11 +80,19 @@ class MainActivity : AppCompatActivity() {
     private lateinit var serverInput: EditText
     private lateinit var manualEnrollStatus: TextView
     private var waitingForUsageAccess = false
+    private lateinit var navigation:com.mdmesh.agent.ui.AgentNavigation
+    fun selectDestination(index:Int) {navigation.select(index)}
+    fun updateNavigationSecurity() {
+        if(NetworkAccessClient(applicationContext).isAdmin() || (::navigation.isInitialized && navigation.selected==1))window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+    }
+    override fun onNewIntent(intent:Intent) {super.onNewIntent(intent);setIntent(intent);navigation.select(intent.getIntExtra("agentDestination",0),intent)}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         waitingForUsageAccess = savedInstanceState?.getBoolean("waiting_for_usage_access") == true
-        setContentView(buildUi())
+        navigation=com.mdmesh.agent.ui.AgentNavigation(this,buildUi(),savedInstanceState?.getInt("agentDestination")?:intent.getIntExtra("agentDestination",0))
+        navigation.select(navigation.selected,intent)
         // Grant our own POST_NOTIFICATIONS as Device Owner BEFORE starting the foreground
         // service, so the "MDMesh active" notification is visible on Android 13+.
         grantSelfNotifications()
@@ -99,7 +107,7 @@ class MainActivity : AppCompatActivity() {
         refresh()
         lifecycleScope.launch {
             lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
-                while (true) { refresh(); kotlinx.coroutines.delay(5_000) }
+                while (true) { if(navigation.selected==0)refresh(); kotlinx.coroutines.delay(5_000) }
             }
         }
     }
@@ -122,6 +130,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        if(::navigation.isInitialized)updateNavigationSecurity()
         refresh()
         if (waitingForUsageAccess && UsageAccessGate.isGranted(this)) {
             waitingForUsageAccess = false
@@ -131,6 +140,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean("waiting_for_usage_access", waitingForUsageAccess)
+        if(::navigation.isInitialized)outState.putInt("agentDestination",navigation.selected)
         super.onSaveInstanceState(outState)
     }
 
@@ -312,7 +322,7 @@ class MainActivity : AppCompatActivity() {
         root.addView(card().apply {
             addView(text("Truy cập mạng", 18f, TEXT, bold = true))
             addView(action("Xem truy cập bị chặn / gửi yêu cầu", primary = false).apply {
-                setOnClickListener { startActivity(Intent(this@MainActivity, com.mdmesh.agent.web.NetworkAccessActivity::class.java)) }
+                setOnClickListener { selectDestination(3) }
             }, LinearLayout.LayoutParams(MATCH, dp(48)))
         })
 
@@ -324,7 +334,7 @@ class MainActivity : AppCompatActivity() {
             }
             addView(approvedAppsSummary)
             addView(action("Tìm ứng dụng / xem yêu cầu", primary = false).apply {
-                setOnClickListener { startActivity(Intent(this@MainActivity, com.mdmesh.agent.apps.AppRequestsActivity::class.java)) }
+                setOnClickListener { selectDestination(2) }
             }, LinearLayout.LayoutParams(MATCH, dp(48)))
         })
         val details = column().apply { visibility = View.GONE }

@@ -56,4 +56,17 @@ class RestScheduleEngineTest {
         val p = AppUsagePolicy("Asia/Ho_Chi_Minh", schedules = listOf(sleep(), sleep().copy(id = "day", from = "06:00", to = "22:00")))
         assertNull(RestScheduleEngine.availableAt(p, "com.game", at("2026-10-20T03:00:00")))
     }
+    @Test fun configurationAppBanCoversMidnightNoonAndEntireWeekWithoutUsageAccess() {
+        val schedules=listOf("00:00" to "12:00", "12:00" to "00:00").mapIndexed { index, window ->
+            AppRestSchedule("app-block:test:$index", "Ban", scope="SELECTED", packages=listOf("com.game"), days=(1..7).toList(), from=window.first, to=window.second)
+        }
+        val p=AppUsagePolicy("Asia/Ho_Chi_Minh", schedules=schedules)
+        for(day in 19..25) for(time in listOf("00:00:00","11:59:59","12:00:00","23:59:59")) {
+            val now=at("2026-10-${day}T$time")
+            assertTrue(RestScheduleEngine.decision(p,"com.game",now,0,false).blocked)
+            assertFalse(RestScheduleEngine.decision(p,"com.other",now,0,false).blocked)
+        }
+        assertNull(RestScheduleEngine.availableAt(p,"com.game",at("2026-10-20T12:00:00")))
+        assertFalse(RestScheduleEngine.decision(p.copy(schedules=emptyList()),"com.game",at("2026-10-20T12:00:00"),0,false).blocked)
+    }
 }

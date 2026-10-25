@@ -61,9 +61,9 @@ internal class NetworkAccessClient(private val context: Context) {
     )
     fun isAdmin() = session.snapshot().cookie.isNotEmpty()
     val refreshExpiresAt:Long get()=session.snapshot().refreshExpiresAt
-    suspend fun admin(path: String, body: JSONObject? = null): JSONObject = AdminSessionRecovery(
+    suspend fun admin(path: String, body: JSONObject? = null, method: String? = null): JSONObject = AdminSessionRecovery(
         session::snapshot,session::clearIf,::renew,::validCookie,authMutex,::maybeUpgrade,
-    ).run { state -> call(path,body,sessionCookie=state.cookie,expectedServer=state.server) }
+    ).run { state -> call(path,body,sessionCookie=state.cookie,expectedServer=state.server,method=method) }
     private suspend fun maybeUpgrade(state:AdminSessionStore.Snapshot):AdminSessionStore.Snapshot {
         if(state.refreshToken.isNotEmpty() || upgradeServer==state.server && System.currentTimeMillis()<upgradeAfter)return state
         val result=try {
@@ -108,7 +108,7 @@ internal class NetworkAccessClient(private val context: Context) {
     }
     private suspend fun revoke(token:String,server:String){runCatching{call("/public/agent-admin-session/revoke",JSONObject(),bearer="Bearer $token",expectedServer=server)}}
     private suspend fun invalidate(previous: String,server:String) { if (previous.isNotEmpty()) runCatching { call("/public/auth/logout", JSONObject(), sessionCookie = previous,expectedServer=server) } }
-    private suspend fun call(path: String, body: JSONObject? = null, bearer: String? = null, captureCookie: Boolean = false, sessionCookie: String = "", expectedServer:String?=null): JSONObject = withContext(Dispatchers.IO) {
+    private suspend fun call(path: String, body: JSONObject? = null, bearer: String? = null, captureCookie: Boolean = false, sessionCookie: String = "", expectedServer:String?=null, method:String?=null): JSONObject = withContext(Dispatchers.IO) {
         val base = ServerConfigStore(context).baseUrl()
         check(expectedServer==null || base==expectedServer){"Máy chủ đã thay đổi. Đăng nhập lại."}
         require(URL(base).protocol == "https") { "Truy cập và đăng nhập yêu cầu server HTTPS." }
@@ -119,7 +119,7 @@ internal class NetworkAccessClient(private val context: Context) {
             if (bearer != null) conn.setRequestProperty("Authorization", bearer)
             if (sessionCookie.isNotEmpty()) conn.setRequestProperty("Cookie", sessionCookie)
             if (body != null) {
-                conn.requestMethod = "POST"; conn.doOutput = true; conn.setRequestProperty("Content-Type", "application/json")
+                conn.requestMethod = method ?: "POST"; conn.doOutput = true; conn.setRequestProperty("Content-Type", "application/json")
                 conn.outputStream.use { it.write(body.toString().toByteArray()) }
             }
             if(conn.responseCode !in 200..299)throw NetworkHttpError(conn.responseCode)
