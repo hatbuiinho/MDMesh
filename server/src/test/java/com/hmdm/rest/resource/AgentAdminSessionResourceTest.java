@@ -30,5 +30,9 @@ public class AgentAdminSessionResourceTest {
         when(session.getAttribute(AgentAdminSessionDAO.SESSION_ATTRIBUTE)).thenReturn("active-family");when(dao.active("active-family",user)).thenReturn(true);
         assertEquals(409,resource.register(request,null).getStatus());verify(dao,never()).issue(org.mockito.ArgumentMatchers.any(),org.mockito.ArgumentMatchers.any());
     }
+    @Test public void agentCannotRegisterInWebPermissionNamespace(){
+        AgentAdminSessionResource.Registration body=new AgentAdminSessionResource.Registration();body.installationId="web_installation-fixture-1234";
+        assertEquals(400,resource.register(request,body).getStatus());verify(dao,never()).issue(any(),any());
+    }
     @Test public void invalidRefreshNeverCreatesCookieSession(){assertEquals(401,resource.refresh(request,"Bearer invalid").getStatus());verify(request,never()).getSession(true);verify(session,never()).invalidate();}
 }

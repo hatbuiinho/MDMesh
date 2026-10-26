@@ -31,6 +31,8 @@ public class AgentAdminSessionResource {
     @POST @Path("/register") @Consumes(MediaType.APPLICATION_JSON)
     public javax.ws.rs.core.Response register(@Context HttpServletRequest request,Registration body){
         User user=authenticated(request);if(user==null)return denied();
+        if(body!=null&&body.installationId!=null&&body.installationId.startsWith("web_"))
+            return javax.ws.rs.core.Response.status(400).entity(Response.ERROR("Reserved installation prefix.")).build();
         if(request.getSession(false).getAttribute(AgentAdminSessionDAO.SESSION_ATTRIBUTE)!=null)
             return javax.ws.rs.core.Response.status(409).entity(Response.ERROR("This session already has a refresh family. Use refresh or sign in again.")).build();
         AgentAdminSessionDAO.Grant grant;

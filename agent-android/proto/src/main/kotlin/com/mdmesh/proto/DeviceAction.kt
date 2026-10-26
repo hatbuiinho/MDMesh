@@ -16,6 +16,7 @@ object DeviceAction {
     const val RING = "device.ring"
     const val RING_STOP = "device.ringStop"
     const val PASSCODE_RESET = "device.passcodeReset"
+    const val UNINSTALL_AGENT = "device.uninstallAgent"
     const val WIPE = "device.wipe"
 
     /** Set the agent's connectivity power mode. Payload: `{ "mode": "adaptive" | "alwaysOn" }`. */
@@ -40,6 +41,6 @@ object DeviceAction {
     /** Keys (after the `device.` prefix) advertised in `capabilities.device`. */
     val ADVERTISED_KEYS: List<String> = listOf(
         "lock", "reboot", "lockscreenMessage", "alert", "ring", "ringStop",
-        "passcodeReset", "wipe", "powerMode", "locationMode", "configApply", "webFilter", "networkAccess",
+        "passcodeReset", "wipe", "uninstallAgent", "powerMode", "locationMode", "configApply", "webFilter", "networkAccess",
     )
 }

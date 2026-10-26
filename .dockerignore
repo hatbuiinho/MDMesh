@@ -15,3 +15,6 @@ releases
 **/*.keystore
 **/*.apk
 **/*.aab
+
+# Public portable-tool template contains no credentials.
+!scripts/windows-portable/.env.example

@@ -4,8 +4,8 @@
 // envelope: { status: "OK" | "ERROR" | ..., message: string | null, data: T }.
 // Authentication is *session based*: AuthResource#login stores the user in the
 // HttpSession and the browser receives a JSESSIONID cookie. There is no bearer
-// token to attach, so every request must be sent with credentials so the
-// cookie rides along.
+// token to attach. Every request sends credentials; a separate HttpOnly refresh
+// cookie renews an expired access session.
 
 export const API_BASE: string =
   (import.meta.env.VITE_API_BASE ?? '/rest').replace(/\/$/, '');
@@ -39,6 +39,43 @@ interface RequestOptions {
   /** Send `body` verbatim as text/plain instead of JSON — for endpoints that read
    *  a raw String (e.g. POST /devices/{id}/description). */
   text?: boolean;
+}
+
+let refreshing: Promise<boolean> | null = null;
+
+async function mutateWebSession(action: 'register' | 'refresh' | 'revoke'): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/public/web-session/${action}`, {
+    method: 'POST', credentials: 'include',
+    headers: { 'X-MDMesh-Session': '1', Accept: 'application/json' },
+  });
+  if (!res.ok) {
+    if (action === 'refresh' && res.status === 401) window.dispatchEvent(new Event('mdmesh-session-expired'));
+    return false;
+  }
+  const envelope = await res.json() as ApiEnvelope<unknown>;
+  return envelope.status === 'OK';
+}
+
+export async function webSession(action: 'register' | 'refresh' | 'revoke'): Promise<boolean> {
+  if (refreshing) await refreshing.catch(() => false);
+  return navigator.locks
+    ? await navigator.locks.request('mdmesh-web-refresh', async () => mutateWebSession(action))
+    : mutateWebSession(action);
+}
+
+function renewSession(): Promise<boolean> {
+  if (!refreshing) {
+    const renew = async () => {
+      const status = await fetch(`${API_BASE}/public/web-session/status`, { credentials: 'include', cache: 'no-store' });
+      return status.ok || mutateWebSession('refresh');
+    };
+    // Coordinate rotation across tabs as well as concurrent requests in this tab.
+    refreshing = (async (): Promise<boolean> => {
+      if (navigator.locks) return await navigator.locks.request('mdmesh-web-refresh', renew);
+      return renew();
+    })().finally(() => { refreshing = null; });
+  }
+  return refreshing;
 }
 
 async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
@@ -82,6 +119,10 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
       'ERROR',
       0,
     );
+  }
+
+  if ((res.status === 401 || res.status === 403) && path.startsWith('/private/')) {
+    if (await renewSession()) res = await fetch(url, init);
   }
 
   if (res.status === 401 || res.status === 403) {

@@ -119,9 +119,10 @@ export function ActionConsole({
     await send(t, values);
   }
 
+  const confirmationWord = active?.key === 'uninstall-agent' ? 'REMOVE' : 'WIPE';
   const canSend =
     !active ? false
-    : active.confirm === 'type-to-confirm' ? confirmText === 'WIPE'
+    : active.confirm === 'type-to-confirm' ? confirmText === confirmationWord
     : active.params?.some((p) => p.required && !values[p.key]) ? false
     : true;
 
@@ -203,7 +204,7 @@ export function ActionConsole({
             ))}
             {active.confirm === 'type-to-confirm' && (
               <label className="field">
-                <span>Type <strong>WIPE</strong> to confirm</span>
+                <span>Type <strong>{confirmationWord}</strong> to confirm</span>
                 <input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} />
               </label>
             )}

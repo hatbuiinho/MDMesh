@@ -42,6 +42,16 @@ public class AgentAdminSessionDAOTest {
         AgentAdminRefreshSession row=register();when(mapper.lockToken(anyString())).thenReturn(row);row.setExpiresAt(1);assertNull(dao.refresh("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"));
         row.setExpiresAt(System.currentTimeMillis()+100000);row.setRevokedAt(1L);assertNull(dao.refresh("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"));row.setRevokedAt(null);user.getUserRole().setSuperAdmin(false);assertNull(dao.refresh("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"));
     }
+    @Test public void readOnlyWebAccountCanRenewWithoutGainingAgentAdminPermission(){
+        user.getUserRole().setSuperAdmin(false);
+        assertNull(dao.issue(user,"installation-fixture-1234"));
+        assertNotNull(dao.issue(user,"web_installation-fixture-1234"));
+        assertFalse(AgentAdminSessionDAO.permitted(user));
+    }
+    @Test public void passwordResetAccountCannotCreateWebRefresh(){
+        user.setPasswordReset(true);
+        assertNull(dao.issue(user,"web_installation-fixture-1234"));
+    }
     @Test public void malformedTokenNeverTouchesDatabaseAndOldTokenCanRevokeFamily(){
         assertNull(dao.refresh("not-a-token"));verifyNoInteractions(mapper,users,settings);
         String raw="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";when(mapper.family(CryptoUtil.getSHA256String(raw))).thenReturn("family");dao.revoke(raw);verify(mapper).revoke(eq("family"),anyLong());

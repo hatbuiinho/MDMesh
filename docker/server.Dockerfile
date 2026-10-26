@@ -3,6 +3,13 @@
 # same image serves any deployment. JDK 17 is required — dependencies (e.g. activemq-broker) ship
 # Java-11+ bytecode, so Java 8 fails to both compile and run.
 
+# Generate the public Windows package without reading deployment .env or copying credentials.
+FROM python:3.12-alpine AS enrollment-tools
+WORKDIR /tools
+COPY scripts/build-windows-enroll-portable.py scripts/enroll-device-adb.py scripts/publish-release.py ./scripts/
+COPY scripts/windows-portable ./scripts/windows-portable
+RUN python3 scripts/build-windows-enroll-portable.py --output /portable
+
 FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /src
 COPY pom.xml ./
@@ -19,6 +26,8 @@ RUN mvn -q -B -DskipTests package
 FROM tomcat:9.0-jdk17-temurin
 RUN rm -rf /usr/local/tomcat/webapps/*
 COPY --from=build /src/server/target/launcher.war /usr/local/tomcat/webapps/ROOT.war
+COPY --from=enrollment-tools /portable/MDMesh-Enroll-Windows.zip /usr/local/share/mdmesh/enrollment-tools/MDMesh-Enroll-Windows.zip
+RUN chmod 0644 /usr/local/share/mdmesh/enrollment-tools/MDMesh-Enroll-Windows.zip
 # App base directory (data, plugins, logging config, email templates). /opt/mdmesh should be a volume
 # so uploaded files + the hosted agent APK survive container recreation.
 RUN mkdir -p /opt/mdmesh/files /opt/mdmesh/plugins \

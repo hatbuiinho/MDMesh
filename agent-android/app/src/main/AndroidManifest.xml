@@ -20,6 +20,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <!-- Keep the wake channel reachable while parked (request battery-optimization exemption). -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
@@ -45,6 +46,10 @@
         tools:ignore="QueryAllPackagesPermission" />
     <queries>
         <intent>
+            <action android:name="android.intent.action.DELETE" />
+            <data android:scheme="package" />
+        </intent>
+        <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
@@ -59,6 +64,7 @@
         android:theme="@style/Theme.MdmAgent"
         tools:targetApi="35">
 
+        <activity android:name=".install.AgentRemovalActivity" android:exported="false" android:theme="@style/Theme.MdmAgent.NetworkAccess" />
         <activity android:name=".usage.AppUsageActivity" android:exported="false" android:theme="@style/Theme.MdmAgent.NetworkAccess" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".web.AdminAccountActivity" android:exported="false" android:lockTaskMode="if_whitelisted" android:theme="@style/Theme.MdmAgent.NetworkAccess" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".apps.AppRequestsActivity" android:exported="false" android:lockTaskMode="if_whitelisted" android:theme="@style/Theme.MdmAgent.NetworkAccess" android:windowSoftInputMode="adjustResize" />

@@ -1,14 +1,14 @@
 # Current local source, applied after external + agent overlays.
 services:
   server:
-    image: mdmesh-server:${LOCAL_BUILD_TAG:-web-app-scope-20261017}
+    image: mdmesh-server:${LOCAL_BUILD_TAG:-adb-tools-ascii-20261026}
   caddy:
-    image: mdmesh-web:${WEB_BUILD_TAG:-release-1031-20261020}
+    image: mdmesh-web:${WEB_BUILD_TAG:-release-1044-20261025}
     environment:
       MDM_SERVER_UPSTREAM: mdmesh-server-internal:8080
     build:
       args:
-        VITE_APP_VERSION: ${WEB_BUILD_TAG:-release-1031-20261020}
+        VITE_APP_VERSION: ${WEB_BUILD_TAG:-release-1044-20261025}
   supervisor:
     environment:
       APPLY_SUPPORTED: "0"

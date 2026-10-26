@@ -27,6 +27,7 @@ import com.mdmesh.core.command.handlers.DeviceRingHandler
 import com.mdmesh.core.command.handlers.DeviceLocationModeHandler
 import com.mdmesh.core.command.handlers.DevicePowerModeHandler
 import com.mdmesh.core.command.handlers.DeviceRingStopHandler
+import com.mdmesh.core.command.handlers.DeviceUninstallAgentHandler
 import com.mdmesh.core.command.handlers.DeviceWipeHandler
 import com.mdmesh.core.config.ConfigApplier
 import com.mdmesh.core.config.ServerConfigStore
@@ -322,6 +323,11 @@ object AgentModule {
     @IntoSet
     fun providePasscodeResetHandler(handle: DpmHandle, store: ResetPasswordTokenStore): CommandHandler =
         DevicePasscodeResetHandler(handle, store)
+
+    @Provides
+    @IntoSet
+    fun provideUninstallAgentHandler(@ApplicationContext context: Context, handle: DpmHandle, kiosk: KioskApplier, config: ConfigStateStore): CommandHandler =
+        DeviceUninstallAgentHandler(context, handle, kiosk, config)
 
     @Provides
     @IntoSet

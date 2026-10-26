@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -15,8 +16,8 @@ import {
 // Auth is session based on the server, but the SPA still needs to remember
 // "am I logged in" across reloads. The session cookie is HttpOnly and not
 // readable from JS, so we persist a lightweight copy of the user object in
-// localStorage purely as a UI hint. If the cookie has actually expired, the
-// next protected API call will 401 and the UI will bounce back to login.
+// localStorage purely as a UI hint. The API client renews an expired access
+// session; a rejected refresh clears this hint and returns the UI to login.
 
 const STORAGE_KEY = 'hmdm.admin.user';
 
@@ -40,6 +41,15 @@ function loadStoredUser(): AuthUser | null {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(loadStoredUser);
+
+  useEffect(() => {
+    const expired = () => {
+      setUser(null);
+      try { localStorage.removeItem(STORAGE_KEY); } catch { /* non-fatal */ }
+    };
+    window.addEventListener('mdmesh-session-expired', expired);
+    return () => window.removeEventListener('mdmesh-session-expired', expired);
+  }, []);
 
   const signIn = useCallback(async (username: string, password: string) => {
     const u = await apiLogin(username, password);

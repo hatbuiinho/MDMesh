@@ -1,5 +1,5 @@
 import SparkMD5 from 'spark-md5';
-import { apiClient } from './client';
+import { apiClient, webSession } from './client';
 
 // Endpoints (see server: com.hmdm.rest.resource.AuthResource):
 //   POST /rest/public/auth/login   body: { login, password }
@@ -60,14 +60,19 @@ export async function login(
     login: username,
     password: hashPassword(password),
   };
-  return apiClient.post<AuthUser>('/public/auth/login', payload);
+  const user = await apiClient.post<AuthUser>('/public/auth/login', payload);
+  if (!user.twoFactor && !user.passwordReset) {
+    if (!await webSession('register')) throw new Error('Could not create renewable web session');
+  }
+  return user;
 }
 
 export async function logout(): Promise<void> {
+  if (!await webSession('revoke')) throw new Error('Could not revoke the web session. Try signing out again.');
   try {
     await apiClient.post<void>('/public/auth/logout');
   } catch {
-    // Best effort: invalidating the session client-side is enough for the UI.
+    // The refresh family has already been revoked, including its access session.
   }
 }
 

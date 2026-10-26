@@ -30,7 +30,17 @@ check Device Manager, and accept USB debugging authorization on the phone.
 
 Console account needs edit_devices. RSA login and two-factor flows are not
 supported by the helper. The server's default new-device configuration is used.
-An already enrolled device does not need another enrollment token.
+An already enrolled device does not need another enrollment token. After installing
+with adb install -r and restoring Device Owner, the helper opens the Overview tab
+and reads the saved device/server from Support information. It reports recovery
+only after the selected server receives a NEW check-in and Device Owner is verified.
+It does not treat a previous successful check-in as proof of current connectivity.
+
+If you only removed management on the web but cancelled Android's uninstall prompt,
+the Agent still has its previous registration. The helper reuses that registration
+when valid, instead of failing to find an enrollment form or creating a duplicate.
+If you need a completely new registration, complete Android's uninstall first.
+The helper never clears app data, overwrites another server, or factory-resets a device.
 
 CMD usage (optional):
   Enroll.cmd --serial DEVICE_SERIAL
@@ -45,3 +55,7 @@ No password/token is intentionally printed or written to logs by this helper.
 Sources and licenses: Python LICENSE.txt is under tools/python; Android
 Platform Tools license/NOTICE files are retained under tools/platform-tools.
 Downloaded original archives are pinned by SHA256 in tools-manifest.json.
+
+Enrollment prompts and messages use Vietnamese without accents for Windows
+console compatibility. Android UI labels are still matched in their original
+Vietnamese form. Authentication values and tokens are not transliterated.

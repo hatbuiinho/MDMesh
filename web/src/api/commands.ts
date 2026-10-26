@@ -190,6 +190,12 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
     }),
   },
   {
+    key: 'uninstall-agent', label: 'Remove MDM Agent', group: 'destructive', danger: true,
+    description: 'Release device management and open Android uninstall confirmation. Management cannot be restored remotely after release. Confirm removal on the device.',
+    confirm: 'type-to-confirm',
+    request: { type: 'device.uninstallAgent', requiresCapability: 'device.uninstallAgent' },
+  },
+  {
     key: 'wipe', label: 'Factory reset (wipe)', group: 'destructive', danger: true,
     description: 'Irreversibly erase the device. Cannot be undone.', confirm: 'type-to-confirm',
     request: { type: 'device.wipe', requiresCapability: 'device.wipe' },

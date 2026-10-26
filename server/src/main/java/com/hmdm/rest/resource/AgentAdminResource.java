@@ -234,7 +234,7 @@ public class AgentAdminResource {
     /** Command types that must never be issued in bulk (destructive group). Lowercased — matched
      *  case-insensitively so a mixed-case type can't slip past this destructive-action guard. */
     private static final Set<String> BULK_FORBIDDEN_TYPES =
-            Set.of("device.wipe", "device.passcodereset");
+            Set.of("device.wipe", "device.passcodereset", "device.uninstallagent");
 
     // =================================================================================================================
     @ApiOperation(value = "Queue agent command for many devices",

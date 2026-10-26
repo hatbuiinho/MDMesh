@@ -17,6 +17,14 @@ public class AgentCapabilityTokensDeviceTest {
     }
 
     @Test
+    public void removalIsDeliveredOnlyToAgentsAdvertisingSupport() {
+        Set<String> older = AgentCapabilityTokens.flatten("{\"device\":[\"wipe\"]}");
+        Set<String> updated = AgentCapabilityTokens.flatten("{\"device\":[\"uninstallAgent\"]}");
+        assertFalse(AgentCapabilityTokens.isAllowed("device.uninstallAgent", older));
+        assertTrue(AgentCapabilityTokens.isAllowed("device.uninstallAgent", updated));
+    }
+
+    @Test
     public void deviceTokenGatesDelivery() {
         Set<String> tokens = AgentCapabilityTokens.flatten("{\"device\":[\"lock\"]}");
         assertTrue(AgentCapabilityTokens.isAllowed("device.lock", tokens));

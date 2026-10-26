@@ -118,7 +118,7 @@ class EnrollmentTests(unittest.TestCase):
         result = subprocess.CompletedProcess([], 255, '',
             'Not allowed to set the device owner because there are already some accounts on the device.')
         with patch.object(module.subprocess, 'run', return_value=result):
-            with self.assertRaisesRegex(ValueError, 'Gỡ tất cả tài khoản'):
+            with self.assertRaisesRegex(ValueError, 'Go tat ca tai khoan'):
                 module.Device('adb', 'test').shell('dpm', 'set-device-owner', module.ADMIN)
 
     def test_adb_text_failure_never_exposes_token(self):
@@ -172,8 +172,119 @@ class EnrollmentTests(unittest.TestCase):
     def test_denied_appop_does_not_report_success(self):
         device = module.Device('adb', 'test')
         with patch.object(device, 'shell', side_effect=['0', '35', '', 'GET_USAGE_STATS: ignore']):
-            with self.assertRaisesRegex(ValueError, 'chưa xác nhận'):
+            with self.assertRaisesRegex(ValueError, 'chua xac nhan'):
                 device.grant_special_access()
+
+
+class ExistingEnrollmentTests(unittest.TestCase):
+    def test_existing_main_flow_does_not_mint_or_fill_another_token(self):
+        from unittest.mock import Mock
+        device, client = Mock(), Mock()
+        device.serial = 'test-device'
+        device.run.return_value = 'Success'
+        device.is_owner.return_value = True
+        state = {'kind': 'existing', 'server': 'https://mdm.example.com', 'deviceId': 'existing-id'}
+        device.enrollment_state.return_value = state
+        with patch.object(module.sys, 'argv', ['enroll-device-adb.py']), \
+                patch.object(module, 'read_env', return_value={'MDM_ADMIN_USERNAME': 'admin', 'MDM_ADMIN_PASSWORD': 'test'}), \
+                patch.object(module, 'ask', side_effect=['https://mdm.example.com', 'y']), \
+                patch.object(module, 'select_device', return_value=device), \
+                patch.object(module.release, 'Client', return_value=client), \
+                patch.object(module, 'login'), patch.object(module, 'download_apk', return_value=Path('/test.apk')), \
+                patch.object(module, 'newest_published', return_value={'versionName': 'test', 'versionCode': 1045}), \
+                patch.object(module, 'verify_existing_enrollment') as verify, \
+                patch.object(module, 'mint_token') as mint, patch('builtins.print'):
+            self.assertEqual(module.main(), 0)
+        verify.assert_called_once_with(device, client, state, 'https://mdm.example.com')
+        mint.assert_not_called()
+        device.fill.assert_not_called()
+
+    def test_restored_usage_tab_is_switched_to_overview_before_scanning(self):
+        device = module.Device('adb', 'test')
+        home = module.ET.fromstring('<node text="Tổng quan" bounds="[0,0][100,100]"/>')
+        field = module.ET.fromstring('<node resource-id="com.mdmesh.agent:id/enrollment_server"/>')
+        with patch.object(device, 'scroll'), patch.object(device, 'tap') as tap, \
+                patch.object(device, 'nodes', side_effect=[[home], [field]]):
+            self.assertEqual(device.enrollment_state(), {'kind': 'new'})
+        tap.assert_called_once_with(home)
+
+    def test_fresh_form_does_not_need_existing_identity(self):
+        device = module.Device('adb', 'test')
+        field = module.ET.fromstring('<node resource-id="com.mdmesh.agent:id/enrollment_server"/>')
+        with patch.object(device, 'scroll'), patch.object(device, 'nodes', return_value=[field]):
+            self.assertEqual(device.enrollment_state(), {'kind': 'new'})
+
+    def test_opens_support_details_and_reads_existing_registration(self):
+        device = module.Device('adb', 'test')
+        toggle = module.ET.fromstring('<node text="Thông tin hỗ trợ  +" bounds="[0,0][100,100]"/>')
+        details = [module.ET.fromstring('<node text="01234567-1234-1234-1234-012345678901"/>'),
+                   module.ET.fromstring('<node text="https://mdm.example.com/"/>')]
+        with patch.object(device, 'scroll'), patch.object(device, 'tap') as tap, \
+                patch.object(device, 'nodes', side_effect=[[toggle], details]):
+            state = device.enrollment_state()
+        tap.assert_called_once_with(toggle)
+        self.assertEqual(state, {'kind': 'existing', 'deviceId': '01234567-1234-1234-1234-012345678901',
+                                 'server': 'https://mdm.example.com'})
+
+    def test_managed_label_alone_is_not_enough_to_claim_enrollment(self):
+        device = module.Device('adb', 'test')
+        label = module.ET.fromstring('<node text="Thiết bị đã được quản lý"/>')
+        with patch.object(device, 'scroll'), patch.object(device, 'nodes', return_value=[label]):
+            with self.assertRaisesRegex(ValueError, 'Khong thay form'):
+                device.enrollment_state()
+
+    def test_existing_registration_requires_new_checkin_and_device_owner(self):
+        from unittest.mock import Mock
+        device, client = Mock(), Mock()
+        device.is_owner.return_value = True
+        client.request.side_effect = [{'updatedAt': 100}, {}, {'updatedAt': 101}]
+        state = {'server': 'https://mdm.example.com', 'deviceId': 'existing-id'}
+        with patch('builtins.print'):
+            module.verify_existing_enrollment(device, client, state, state['server'])
+        self.assertEqual([call.args[0] for call in client.request.call_args_list], [
+            'private/agent/v1/devices/existing-id/state',
+            'private/agent/v1/devices/existing-id/sync',
+            'private/agent/v1/devices/existing-id/state'])
+
+    def test_stale_checkin_is_not_treated_as_recovery(self):
+        from unittest.mock import Mock
+        device, client = Mock(), Mock()
+        client.request.return_value = {'updatedAt': 100}
+        state = {'server': 'https://mdm.example.com', 'deviceId': 'existing-id'}
+        with patch.object(module.time, 'monotonic', side_effect=[0, 0, 61]), \
+                patch.object(module.time, 'sleep'), patch('builtins.print'):
+            with self.assertRaisesRegex(ValueError, 'chua check-in'):
+                module.verify_existing_enrollment(device, client, state, state['server'])
+        device.is_owner.assert_not_called()
+
+    def test_fresh_checkin_without_owner_is_not_recovery(self):
+        from unittest.mock import Mock
+        device, client = Mock(), Mock()
+        device.is_owner.return_value = False
+        client.request.side_effect = [{'updatedAt': 100}, {}, {'updatedAt': 101}]
+        state = {'server': 'https://mdm.example.com', 'deviceId': 'existing-id'}
+        with patch.object(module.time, 'monotonic', side_effect=[0, 0, 61]), \
+                patch.object(module.time, 'sleep'), patch('builtins.print'):
+            with self.assertRaisesRegex(ValueError, 'chua check-in'):
+                module.verify_existing_enrollment(device, client, state, state['server'])
+
+    def test_different_server_is_not_overwritten(self):
+        from unittest.mock import Mock
+        device, client = Mock(), Mock()
+        state = {'server': 'https://old.example.com', 'deviceId': 'existing-id'}
+        with self.assertRaisesRegex(ValueError, 'may chu khac'):
+            module.verify_existing_enrollment(device, client, state, 'https://new.example.com')
+        client.request.assert_not_called()
+        device.shell.assert_not_called()
+
+    def test_missing_server_registration_has_actionable_error(self):
+        from unittest.mock import Mock
+        device, client = Mock(), Mock()
+        client.request.side_effect = ValueError('unknown device')
+        state = {'server': 'https://mdm.example.com', 'deviceId': 'existing-id'}
+        with self.assertRaisesRegex(ValueError, 'ID dang ky cu'):
+            module.verify_existing_enrollment(device, client, state, state['server'])
+        self.assertEqual(client.request.call_count, 1)
 
 
 if __name__ == '__main__':
