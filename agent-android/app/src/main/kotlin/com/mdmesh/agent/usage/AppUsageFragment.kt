@@ -43,8 +43,7 @@ internal fun UsageScreen(model:UsageViewModel,account:()->Unit) {
     val s by model.state.collectAsStateWithLifecycle()
     var query by rememberSaveableText()
     val apps=remember(s.apps,query){s.apps.filter{it.name.contains(query,true)||it.pkg.contains(query,true)}}
-    // The Activity places this fragment above BottomNavigationView, which handles bottom system insets.
-    // Keep side/cutout protection here; reserving navigation-bar space again leaves a blank strip.
+    // AgentNavigation consumes window insets for every tab before they reach Compose.
     Scaffold(contentWindowInsets=WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal),topBar={TopAppBar(title={Text("Sử dụng ứng dụng")},actions={IconButton(onClick={model.refresh()},enabled=!s.loading){Icon(androidx.compose.ui.res.painterResource(com.mdmesh.agent.R.drawable.network_refresh),contentDescription="Làm mới")};IconButton(onClick=account){Icon(androidx.compose.ui.res.painterResource(com.mdmesh.agent.R.drawable.network_account),contentDescription="Tài khoản quản trị")}})}) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(horizontal=16.dp)) {
             Text("Tất cả cấu hình",style=MaterialTheme.typography.titleMedium)

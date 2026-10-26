@@ -9,8 +9,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.res.ColorStateList
 import android.widget.Toast
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import android.graphics.Typeface
 import android.os.Build
@@ -254,7 +252,6 @@ class MainActivity : AppCompatActivity() {
         dpmHandle.dpm.isDeviceOwnerApp(packageName)
 
     private fun buildUi(): ScrollView {
-        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window,false)
         window.statusBarColor = BACKGROUND
         window.navigationBarColor = BACKGROUND
         WindowInsetsControllerCompat(window, window.decorView).apply {
@@ -262,7 +259,7 @@ class MainActivity : AppCompatActivity() {
             isAppearanceLightNavigationBars = true
         }
         val root = column().apply {
-            setPadding(dp(24), dp(28), dp(24), dp(28))
+            setPadding(dp(16), dp(8), dp(16), dp(16))
             isFocusableInTouchMode = true
         }
         root.addView(AgentUi.toolbar(this,"MDMesh",back=false))
@@ -374,11 +371,6 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(BACKGROUND)
             isFillViewport = true
             addView(root)
-            ViewCompat.setOnApplyWindowInsetsListener(this) { view, insets ->
-                val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime())
-                view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
-                insets
-            }
         }
     }
 

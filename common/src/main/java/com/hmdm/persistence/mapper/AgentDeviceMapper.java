@@ -37,6 +37,16 @@ import java.util.List;
  */
 public interface AgentDeviceMapper {
 
+    /** Serialize enrollment for one customer/hardware pair across server instances. */
+    @Select({"SELECT 1 FROM pg_advisory_xact_lock(#{customerId}, hashtext(#{hardwareId}))"})
+    Integer lockEnrollment(@Param("customerId") int customerId, @Param("hardwareId") String hardwareId);
+
+    /** Reuse the oldest registration of this hardware within the token's customer only. */
+    @Select({"SELECT number FROM devices WHERE customerId = #{customerId} " +
+            "AND hardwareid = #{hardwareId} ORDER BY id ASC LIMIT 1"})
+    String findDeviceNumberByHardwareId(@Param("customerId") int customerId,
+                                        @Param("hardwareId") String hardwareId);
+
     @Update({"UPDATE devices SET agentCapabilities = #{capabilitiesJson} WHERE number = #{deviceNumber}"})
     void updateDeviceCapabilities(@Param("deviceNumber") String deviceNumber,
                                   @Param("capabilitiesJson") String capabilitiesJson);

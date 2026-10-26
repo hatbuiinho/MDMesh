@@ -47,6 +47,16 @@ class DeviceUninstallAgentHandler(
             if (exited is KioskResult.Failed) return CommandResults.failed(command, exited.reason)
             handle.dpm.clearUserRestriction(handle.admin, UserManager.DISALLOW_UNINSTALL_APPS)
             handle.dpm.setUninstallBlocked(handle.admin, pkg, false)
+            // protectAgentProcess() marks us as an owner-protected package on API 30+.
+            // Clear that list while we still have authority: some devices retain
+            // PackageManager's protection after the owner is removed and reject uninstall.
+            // Let failures abort removal rather than relinquishing the authority to retry.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                handle.dpm.setUserControlDisabledPackages(handle.admin, emptyList())
+                check(handle.dpm.getUserControlDisabledPackages(handle.admin).isEmpty()) {
+                    "Owner-protected packages were not cleared; Device Owner retained"
+                }
+            }
             handle.dpm.clearDeviceOwnerApp(pkg)
         }
         if (handle.dpm.isAdminActive(handle.admin)) handle.dpm.removeActiveAdmin(handle.admin)

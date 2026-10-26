@@ -55,6 +55,14 @@ public class AgentCommandDAO {
         this.eventMapper = eventMapper;
     }
 
+    public void lockEnrollment(int customerId, String hardwareId) {
+        deviceMapper.lockEnrollment(customerId, hardwareId);
+    }
+
+    public String findDeviceNumberByHardwareId(int customerId, String hardwareId) {
+        return deviceMapper.findDeviceNumberByHardwareId(customerId, hardwareId);
+    }
+
     public void insert(AgentCommand command) {
         mapper.insert(command);
     }

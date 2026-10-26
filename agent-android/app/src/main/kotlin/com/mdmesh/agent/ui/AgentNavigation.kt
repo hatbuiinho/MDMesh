@@ -3,6 +3,9 @@ package com.mdmesh.agent.ui
 import android.content.Intent
 import android.view.View
 import android.widget.LinearLayout
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.doOnAttach
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentContainerView
 import androidx.lifecycle.Lifecycle
@@ -21,6 +24,7 @@ internal class AgentNavigation(private val activity:MainActivity,home:View,initi
     var selected=0
         private set
     init {
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(activity.window, false)
         val shell=LinearLayout(activity).apply {orientation=LinearLayout.VERTICAL;setBackgroundColor(activity.getColor(R.color.network_background))}
         val content=android.widget.FrameLayout(activity)
         content.addView(home);content.addView(container,android.widget.FrameLayout.LayoutParams(-1,-1))
@@ -33,6 +37,19 @@ internal class AgentNavigation(private val activity:MainActivity,home:View,initi
             setOnItemSelectedListener {select(it.itemId-1);true}
         }
         shell.addView(bottomNavigation,LinearLayout.LayoutParams(-1,-2))
+        // Own all window insets here. In particular, Material's navigation view must
+        // not receive IME insets: it otherwise grows its bottom padding by the
+        // keyboard height, while the overview also reserves that same space.
+        ViewCompat.setOnApplyWindowInsetsListener(shell) { view, insets ->
+            val edges = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or
+                    WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime()
+            )
+            view.setPadding(edges.left, edges.top, edges.right, edges.bottom)
+            bottomNavigation.visibility = if (insets.isVisible(WindowInsetsCompat.Type.ime())) View.GONE else View.VISIBLE
+            WindowInsetsCompat.CONSUMED
+        }
+        shell.doOnAttach { ViewCompat.requestApplyInsets(it) }
         activity.setContentView(shell)
         select(initial)
     }

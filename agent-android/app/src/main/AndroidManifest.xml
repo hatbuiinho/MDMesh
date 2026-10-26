@@ -90,6 +90,7 @@
         <!-- App-drawer status screen (real managed state). Not HOME — the kiosk launcher owns HOME. -->
         <activity
             android:name=".MainActivity"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.MdmAgent.NetworkAccess"
             android:exported="true"
             android:launchMode="singleTask"

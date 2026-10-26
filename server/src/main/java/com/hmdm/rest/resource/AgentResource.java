@@ -127,6 +127,7 @@ public class AgentResource {
     @Path("/enroll")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
+    @org.mybatis.guice.transactional.Transactional
     public Response enroll(AgentEnrollRequest request) {
         if (request == null || request.getEnrollToken() == null || request.getEnrollToken().trim().isEmpty()) {
             return Response.ERROR("error.agent.token.invalid");
@@ -154,10 +155,26 @@ public class AgentResource {
         String deviceId = UUID.randomUUID().toString();
         Device device = null;
         try {
-            // The device lands in the token's customer, and in the token's configuration when the
-            // admin bound one at mint time (else the customer's settings default).
-            device = unsecureDAO.createNewDeviceForToken(
-                    deviceId, token.getCustomerId(), token.getConfigurationId());
+            // Match only inside the token's customer. New registrations use the token's
+            // configuration (or customer default); existing registrations keep their configuration.
+            String hardwareId = request.getHardwareId() == null ? null : request.getHardwareId().trim();
+            if (hardwareId != null && !hardwareId.isEmpty()) {
+                commandDAO.lockEnrollment(token.getCustomerId(), hardwareId);
+                String existingNumber = commandDAO.findDeviceNumberByHardwareId(token.getCustomerId(), hardwareId);
+                if (existingNumber != null) {
+                    device = unsecureDAO.getDeviceByNumber(existingNumber);
+                    if (device == null || !java.util.Objects.equals(device.getCustomerId(), token.getCustomerId())) {
+                        throw new IllegalStateException("Enrollment device changed customer or was deleted");
+                    }
+                }
+            }
+            // Keep the existing registration, configuration and history when re-enrolling.
+            if (device != null) {
+                deviceId = device.getNumber();
+            } else {
+                device = unsecureDAO.createNewDeviceForToken(
+                        deviceId, token.getCustomerId(), token.getConfigurationId());
+            }
             if (device == null) {
                 // Named error (not a generic internal one) — this exact failure cost a debugging
                 // session: valid token, reachable server, no device row.
@@ -171,8 +188,7 @@ public class AgentResource {
                     + UUID.randomUUID().toString().replace("-", "");
             commandDAO.updateDeviceSecretHash(deviceId, CryptoUtil.getSHA256String(deviceSecret));
             commandDAO.updateDeviceCapabilities(deviceId, capabilitiesJson(request.getCapabilities()));
-            // Record the agent's stable hardware id so duplicate enrollments of the same physical
-            // device can be detected/flagged in the admin UI (we still create a fresh row per enroll).
+            // Persist the stable hardware identity for subsequent re-enrollment.
             if (request.getHardwareId() != null && !request.getHardwareId().trim().isEmpty()) {
                 commandDAO.updateHardwareId(deviceId, request.getHardwareId().trim());
             }

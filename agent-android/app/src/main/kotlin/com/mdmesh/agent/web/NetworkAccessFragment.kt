@@ -136,10 +136,7 @@ class NetworkAccessFragment : androidx.fragment.app.Fragment() {
         else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
         scrollY=listScroll?.scrollY ?: 0
         val root=LinearLayout(requireContext()).apply { setBackgroundColor(getColor(R.color.network_background)); orientation=LinearLayout.VERTICAL; setPadding(dp(16),0,dp(16),0) }
-        ViewCompat.setOnApplyWindowInsetsListener(root) { v,insets ->
-            val edges=insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime())
-            v.setPadding(dp(16)+edges.left,edges.top,dp(16)+edges.right,edges.bottom); insets
-        }
+        // AgentNavigation owns window insets for tab content. Dialogs own theirs.
         fun button(parent:LinearLayout,title:String, click:()->Unit) {
             parent.addView(actionButton(title, primary=false).apply { isEnabled=!busy; setOnClickListener { click() } })
         }
