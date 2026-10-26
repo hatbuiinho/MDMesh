@@ -161,6 +161,24 @@ class Device:
         section = re.search(r'Device Owner:(.*?)(?=\n\s*User ID:|\n\s*Profile Owner|\Z)', policy, re.S)
         return bool(section and ADMIN in section[1])
 
+    def phone_name(self):
+        user = self.shell('am', 'get-current-user').strip()
+        if not user.isdigit():
+            raise ValueError('Khong xac dinh duoc user Android hien tai.')
+        sources = [
+            ('settings', 'get', 'global', 'device_name'),
+            ('settings', '--user', user, 'get', 'secure', 'bluetooth_name'),
+            ('getprop', 'ro.product.model'),
+        ]
+        for command in sources:
+            value = self.shell(*command).strip()
+            if value and value.lower() != 'null':
+                # Keep Unicode names; remove line breaks/control characters for display and API.
+                value = ' '.join(''.join(c if c.isprintable() else ' ' for c in value).split())
+                if value:
+                    return value[:255]
+        raise ValueError('Khong doc duoc ten dien thoai hoac model; chua tao token enroll.')
+
     def grant_special_access(self):
         user = self.shell('am', 'get-current-user').strip()
         if not user.isdigit():
@@ -177,6 +195,34 @@ class Device:
             print(f'Da cap va xac minh: {label}', flush=True)
         if sdk < 31:
             print('Android duoi 12: khong can cap rieng quyen Chuong bao va loi nhac.', flush=True)
+
+        self.grant_location_access(user, sdk)
+
+    def grant_location_access(self, user, sdk):
+        permissions = ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION']
+        if sdk >= 29:
+            permissions.append('ACCESS_BACKGROUND_LOCATION')
+        for permission in permissions:
+            self.shell('pm', 'grant', '--user', user, PACKAGE, 'android.permission.' + permission)
+        # Inspect this user's runtime grants, not another user's state or requested permissions.
+        package_state = self.shell('dumpsys', 'package', PACKAGE)
+        user_state = re.search(r'(?ms)^\s*User ' + re.escape(user)
+                               + r':(.*?)(?=^\s*User \d+:|\Z)', package_state)
+        for permission in permissions:
+            if user_state is None or not re.search(
+                    r'android\.permission\.' + permission + r':\s*granted=true\b', user_state[1]):
+                raise ValueError(f'Android chua xac nhan quyen vi tri {permission} da duoc cap.')
+        if sdk >= 30:
+            self.shell('cmd', 'location', 'set-location-enabled', 'true', '--user', user)
+            enabled = self.shell('cmd', 'location', 'is-location-enabled', '--user', user).strip()
+            if enabled != 'true':
+                raise ValueError('Android chua xac nhan da bat dich vu vi tri/GPS.')
+        else:
+            self.shell('settings', '--user', user, 'put', 'secure', 'location_mode', '3')
+            enabled = self.shell('settings', '--user', user, 'get', 'secure', 'location_mode').strip()
+            if enabled != '3':
+                raise ValueError('Android chua xac nhan da bat dich vu vi tri/GPS.')
+        print('Da cap va xac minh: vi tri chinh xac, vi tri nen (Android 10+) va bat GPS.', flush=True)
 
     def nodes(self):
         # Some Android builds only print a success message for /dev/tty and
@@ -267,6 +313,26 @@ class Device:
         self.shell('input', 'keyevent', 'KEYCODE_BACK')
 
 
+def set_default_device_name(device, client, base, name):
+    state = device.enrollment_state()
+    if state.get('kind') != 'existing' or state.get('server', '').rstrip('/') != base.rstrip('/'):
+        raise ValueError('Da enroll nhung chua xac dinh duoc device tren dung server de dat ten. Khong enroll lai.')
+    path = 'private/devices/number/' + urllib.parse.quote(state['deviceId'], safe='')
+    row = client.request(path)
+    if (not isinstance(row, dict) or row.get('number') != state['deviceId']
+            or type(row.get('id')) is not int or row['id'] <= 0):
+        raise ValueError('Da enroll nhung API chua tra ve dung device de dat ten. Khong enroll lai.')
+    if (row.get('description') or '').strip():
+        print('Giu nguyen ten device da co tren MDMesh.', flush=True)
+        return
+    endpoint = f"private/devices/{row['id']}/description"
+    client.request(endpoint, name.encode('utf-8'), content_type='text/plain; charset=utf-8')
+    saved = client.request(path) or {}
+    if saved.get('description') != name:
+        raise ValueError('Da enroll nhung chua xac minh duoc ten device da luu. Khong enroll lai.')
+    print(f'Da dat ten device: {name}', flush=True)
+
+
 def verify_existing_enrollment(device, client, state, base, timeout=60):
     """Prove a fresh authenticated check-in before reporting idempotent recovery as success."""
     if state['server'].rstrip('/') != base.rstrip('/'):
@@ -317,7 +383,7 @@ def select_device(requested_serial):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial')
-    parser.add_argument('--permissions-only', action='store_true', help='Chi cap Usage Access va Chuong bao/loi nhac; khong cai APK hoac enroll')
+    parser.add_argument('--permissions-only', action='store_true', help='Cap Usage Access, Chuong bao/loi nhac, quyen vi tri va bat GPS; khong cai APK hoac enroll')
     parser.add_argument('--base-url')
     parser.add_argument('--env-file', type=Path, default=ROOT / '.env')
     args = parser.parse_args()
@@ -363,6 +429,8 @@ def main():
         if state['kind'] == 'existing':
             verify_existing_enrollment(device, client, state, base)
             return 0
+        name = device.phone_name()
+        print(f'Ten device mac dinh: {name}', flush=True)
         # Inspection may have scrolled the form offscreen; restart at the top before filling.
         device.scroll(upward=True)
         device.fill('enrollment_server', base)
@@ -380,6 +448,7 @@ def main():
             device.scroll(upward=True)
             texts = [n.get('text', '') for n in device.nodes()]
             if any('Thi\u1ebft b\u1ecb \u0111\xe3 \u0111\u01b0\u1ee3c qu\u1ea3n l\xfd' in t for t in texts) and any('K\u1ebft n\u1ed1i th\xe0nh c\xf4ng l\xfac' in t for t in texts):
+                set_default_device_name(device, client, base, name)
                 print('Enroll thanh cong: Agent xac nhan thiet bi da duoc quan ly va ket noi server.')
                 return 0
             time.sleep(2)

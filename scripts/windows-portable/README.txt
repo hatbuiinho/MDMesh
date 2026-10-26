@@ -7,6 +7,10 @@ MDMesh Enroll - Windows portable (Windows 10/11 x64)
    and accept the computer's RSA authorization prompt.
 4. Double-click Enroll.cmd and choose your device.
 5. Keep MDMesh Agent visible and the phone unlocked until enrollment completes.
+   Enrollment automatically grants precise/background location and enables GPS,
+   alongside Usage Access and Alarms & reminders. Each permission is verified.
+   After enrollment, the Android phone name becomes the default MDMesh display
+   name (model is the fallback). An existing MDMesh display name is preserved.
 
 The bundle includes Python and ADB; no Python, Android Studio, Git Bash, pip,
 PATH changes or administrator privileges are required for normal enrollment.
@@ -17,7 +21,7 @@ fresh enrollment token. The highest published release versionCode is selected;
 local APKs are never used. APK SHA256 is verified before installation.
 Downloads of the APK are temporary and removed on exit.
 
-Grant-Permissions.cmd: grant and verify Usage Access and Alarms & reminders
+Grant-Permissions.cmd: grant and verify Usage Access, Alarms & reminders, precise/background location, and enable GPS
 for an already installed Agent, without API login or another enrollment.
 Setup.cmd: verify/restore the portable tools only.
 

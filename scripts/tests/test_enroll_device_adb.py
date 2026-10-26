@@ -158,14 +158,14 @@ class EnrollmentTests(unittest.TestCase):
         device = module.Device('adb', 'test')
         with patch.object(device, 'shell', side_effect=[
                 '10', '35', '', 'GET_USAGE_STATS: allow; time=+1s', '',
-                'SCHEDULE_EXACT_ALARM: allow']) as shell, patch('builtins.print'):
+                'SCHEDULE_EXACT_ALARM: allow']) as shell, patch.object(device, 'grant_location_access'), patch('builtins.print'):
             device.grant_special_access()
         self.assertIn(unittest.mock.call('appops', 'set', '--user', '10', module.PACKAGE,
                                         'SCHEDULE_EXACT_ALARM', 'allow'), shell.call_args_list)
 
     def test_older_android_skips_exact_alarm_appop(self):
         device = module.Device('adb', 'test')
-        with patch.object(device, 'shell', side_effect=['0', '30', '', 'GET_USAGE_STATS: allow']) as shell, patch('builtins.print'):
+        with patch.object(device, 'shell', side_effect=['0', '30', '', 'GET_USAGE_STATS: allow']) as shell, patch.object(device, 'grant_location_access'), patch('builtins.print'):
             device.grant_special_access()
         self.assertFalse(any('SCHEDULE_EXACT_ALARM' in c.args for c in shell.call_args_list))
 
@@ -174,6 +174,97 @@ class EnrollmentTests(unittest.TestCase):
         with patch.object(device, 'shell', side_effect=['0', '35', '', 'GET_USAGE_STATS: ignore']):
             with self.assertRaisesRegex(ValueError, 'chua xac nhan'):
                 device.grant_special_access()
+
+
+class LocationAccessTests(unittest.TestCase):
+    def grant_state(self, user='10', background=True):
+        permissions = ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION']
+        if background:
+            permissions.append('ACCESS_BACKGROUND_LOCATION')
+        return 'User ' + user + ':\n  runtime permissions:\n' + '\n'.join(
+            '    android.permission.' + p + ': granted=true, flags=[]' for p in permissions)
+
+    def test_current_user_gets_foreground_then_background_and_gps(self):
+        device = module.Device('adb', 'test')
+        with patch.object(device, 'shell', side_effect=[
+                '', '', '', self.grant_state(), '', 'true']) as shell, patch('builtins.print'):
+            device.grant_location_access('10', 35)
+        grants = [c.args for c in shell.call_args_list if c.args[:2] == ('pm', 'grant')]
+        self.assertEqual([g[-1] for g in grants], ['android.permission.ACCESS_COARSE_LOCATION',
+                         'android.permission.ACCESS_FINE_LOCATION', 'android.permission.ACCESS_BACKGROUND_LOCATION'])
+        self.assertTrue(all(g[2:5] == ('--user', '10', module.PACKAGE) for g in grants))
+        self.assertIn(unittest.mock.call('cmd', 'location', 'set-location-enabled', 'true', '--user', '10'), shell.call_args_list)
+
+    def test_android_9_skips_background_permission_and_enables_legacy_location(self):
+        device = module.Device('adb', 'test')
+        with patch.object(device, 'shell', side_effect=[
+                '', '', self.grant_state(background=False), '', '3']) as shell, patch('builtins.print'):
+            device.grant_location_access('10', 28)
+        self.assertFalse(any('android.permission.ACCESS_BACKGROUND_LOCATION' in c.args for c in shell.call_args_list))
+        self.assertIn(unittest.mock.call('settings', '--user', '10', 'put', 'secure', 'location_mode', '3'), shell.call_args_list)
+
+    def test_another_users_grants_do_not_count(self):
+        device = module.Device('adb', 'test')
+        with patch.object(device, 'shell', side_effect=['', '', '', self.grant_state('0')]):
+            with self.assertRaisesRegex(ValueError, 'chua xac nhan quyen vi tri'):
+                device.grant_location_access('10', 35)
+
+    def test_location_switch_must_be_verified(self):
+        device = module.Device('adb', 'test')
+        with patch.object(device, 'shell', side_effect=['', '', '', self.grant_state(), '', 'false']):
+            with self.assertRaisesRegex(ValueError, 'dich vu vi tri/GPS'):
+                device.grant_location_access('10', 35)
+
+
+class DeviceNameTests(unittest.TestCase):
+    def test_reads_unicode_phone_name(self):
+        device = module.Device('adb', 'test')
+        with patch.object(device, 'shell', side_effect=['10', 'Điện thoại của An']) as shell:
+            self.assertEqual(device.phone_name(), 'Điện thoại của An')
+        self.assertEqual(shell.call_args_list[-1].args, ('settings', 'get', 'global', 'device_name'))
+
+    def test_falls_back_to_model(self):
+        device = module.Device('adb', 'test')
+        with patch.object(device, 'shell', side_effect=['0', 'null', '', 'Galaxy A54']):
+            self.assertEqual(device.phone_name(), 'Galaxy A54')
+
+    def test_sets_and_reloads_name_as_utf8_text(self):
+        from unittest.mock import Mock
+        device, client = Mock(), Mock()
+        device.enrollment_state.return_value = {'kind': 'existing', 'server': 'https://mdm.example', 'deviceId': 'uuid'}
+        client.request.side_effect = [{'id': 42, 'number': 'uuid', 'description': None},
+                                      None, {'description': 'Điện thoại An'}]
+        with patch('builtins.print'):
+            module.set_default_device_name(device, client, 'https://mdm.example', 'Điện thoại An')
+        client.request.assert_any_call('private/devices/42/description', 'Điện thoại An'.encode('utf-8'),
+                                       content_type='text/plain; charset=utf-8')
+        self.assertEqual(client.request.call_count, 3)
+
+    def test_preserves_existing_admin_name(self):
+        from unittest.mock import Mock
+        device, client = Mock(), Mock()
+        device.enrollment_state.return_value = {'kind': 'existing', 'server': 'https://mdm.example', 'deviceId': 'uuid'}
+        client.request.return_value = {'id': 42, 'number': 'uuid', 'description': 'Warehouse tablet'}
+        with patch('builtins.print'):
+            module.set_default_device_name(device, client, 'https://mdm.example', 'Galaxy')
+        self.assertEqual(client.request.call_count, 1)
+
+    def test_different_server_is_never_renamed(self):
+        from unittest.mock import Mock
+        device, client = Mock(), Mock()
+        device.enrollment_state.return_value = {'kind': 'existing', 'server': 'https://other.example', 'deviceId': 'uuid'}
+        with self.assertRaisesRegex(ValueError, 'dung server'):
+            module.set_default_device_name(device, client, 'https://mdm.example', 'Galaxy')
+        client.request.assert_not_called()
+
+    def test_wrong_device_response_is_never_renamed(self):
+        from unittest.mock import Mock
+        device, client = Mock(), Mock()
+        device.enrollment_state.return_value = {'kind': 'existing', 'server': 'https://mdm.example', 'deviceId': 'uuid'}
+        client.request.return_value = {'id': 42, 'number': 'another'}
+        with self.assertRaisesRegex(ValueError, 'dung device'):
+            module.set_default_device_name(device, client, 'https://mdm.example', 'Galaxy')
+        self.assertEqual(client.request.call_count, 1)
 
 
 class ExistingEnrollmentTests(unittest.TestCase):

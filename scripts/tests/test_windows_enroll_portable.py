@@ -31,6 +31,9 @@ class PortableTests(unittest.TestCase):
                              (ROOT / 'scripts/enroll-device-adb.py').read_bytes())
             with zipfile.ZipFile(archive) as z:
                 self.assertIn('MDMesh-Enroll/Enroll.cmd', z.namelist())
+                self.assertEqual(z.read('MDMesh-Enroll/app/scripts/enroll-device-adb.py'),
+                                 (ROOT / 'scripts/enroll-device-adb.py').read_bytes())
+                self.assertIn(b'--permissions-only', z.read('MDMesh-Enroll/Grant-Permissions.cmd'))
                 self.assertEqual(z.read('MDMesh-Enroll/.env').decode(), config)
                 self.assertFalse(any('keystore' in name for name in z.namelist()))
             self.assertIn(module.checksum(archive), (archive.parent / 'SHA256SUMS').read_text())
