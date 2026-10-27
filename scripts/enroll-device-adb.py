@@ -342,8 +342,8 @@ class Device:
             raise ValueError('Khong dien duoc du lieu chinh xac tren thiet bi; dung truoc khi gui dang ky.')
 
 
-def set_default_device_name(device, client, base, name):
-    state = device.enrollment_state()
+def set_default_device_name(device, client, base, name, state=None):
+    state = state or device.enrollment_state()
     if state.get('kind') != 'existing' or state.get('server', '').rstrip('/') != base.rstrip('/'):
         raise ValueError('Da enroll nhung chua xac dinh duoc device tren dung server de dat ten. Khong enroll lai.')
     path = 'private/devices/number/' + urllib.parse.quote(state['deviceId'], safe='')
@@ -360,6 +360,29 @@ def set_default_device_name(device, client, base, name):
     if saved.get('description') != name:
         raise ValueError('Da enroll nhung chua xac minh duoc ten device da luu. Khong enroll lai.')
     print(f'Da dat ten device: {name}', flush=True)
+
+
+def wait_for_registration(device, client, base, timeout=60):
+    """Confirm registration independently of the next periodic check-in."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            state = device.enrollment_state()
+        except ValueError as error:
+            if not str(error).startswith(('UI Automator', 'Khong thay form')):
+                raise
+            time.sleep(2)
+            continue
+        if state.get('kind') == 'existing':
+            if state.get('server', '').rstrip('/') != base.rstrip('/'):
+                raise ValueError('Agent dang luu may chu khac voi may chu da chon; khong dang ky lai.')
+            row = client.request('private/devices/number/' + urllib.parse.quote(state['deviceId'], safe=''))
+            if (isinstance(row, dict) and row.get('number') == state['deviceId']
+                    and type(row.get('id')) is int and row['id'] > 0 and device.is_owner()):
+                return state
+        time.sleep(2)
+    raise ValueError('Chua xac minh duoc dang ky tren Agent va server trong thoi gian cho. '
+                     'Neu Agent da co ma thiet bi, khong enroll lai de tranh tao token thua.')
 
 
 def verify_existing_enrollment(device, client, state, base, timeout=60):
@@ -450,7 +473,8 @@ def main():
         if 'Success' not in installed:
             raise ValueError('ADB chua xac nhan cai APK thanh cong.')
         print('Da cai APK thanh cong.', flush=True)
-        if not device.is_owner():
+        restoring_owner = not device.is_owner()
+        if restoring_owner:
             print('Dang thiet lap Device Owner...', flush=True)
             device.shell('dpm', 'set-device-owner', ADMIN)
         if not device.is_owner():
@@ -460,7 +484,11 @@ def main():
                      '--ei', 'agentDestination', '0')
         state = device.enrollment_state()
         if state['kind'] == 'existing':
-            verify_existing_enrollment(device, client, state, base)
+            if restoring_owner:
+                verify_existing_enrollment(device, client, state, base)
+            else:
+                wait_for_registration(device, client, base)
+                print('Thiet bi da dang ky tren dung server va Device Owner hop le; khong can enroll lai.', flush=True)
             return 0
         name = device.phone_name()
         print(f'Ten device mac dinh: {name}', flush=True)
@@ -479,16 +507,11 @@ def main():
         button = device.find(lambda n: n.get('class') == 'android.widget.Button' and n.get('text') == '\u0110\u0103ng k\xfd thi\u1ebft b\u1ecb')
         device.tap(button)
         print('Da gui dang ky. Dang cho Agent xac nhan...', flush=True)
-        deadline = time.monotonic() + 60
-        while time.monotonic() < deadline:
-            device.scroll(upward=True)
-            texts = [n.get('text', '') for n in device.nodes()]
-            if any('Thi\u1ebft b\u1ecb \u0111\xe3 \u0111\u01b0\u1ee3c qu\u1ea3n l\xfd' in t for t in texts) and any('K\u1ebft n\u1ed1i th\xe0nh c\xf4ng l\xfac' in t for t in texts):
-                set_default_device_name(device, client, base, name)
-                print('Enroll thanh cong: Agent xac nhan thiet bi da duoc quan ly va ket noi server.')
-                return 0
-            time.sleep(2)
-        raise ValueError('Het thoi gian cho xac nhan. Kiem tra device ID/trang thai trong Agent; khong tu chay lai de tranh tao token thua.')
+        state = wait_for_registration(device, client, base)
+        print('Enroll thanh cong: ma thiet bi da luu trong Agent, server da co ban ghi va Device Owner hop le.', flush=True)
+        set_default_device_name(device, client, base, name, state=state)
+        print('Check-in la buoc rieng; xem trang thai ket noi trong Agent hoac tren web.', flush=True)
+        return 0
     except (OSError, ValueError, subprocess.SubprocessError, ET.ParseError, urllib.error.URLError) as error:
         if isinstance(error, urllib.error.HTTPError):
             message = f'API tra HTTP {error.code}; kiem tra URL, tai khoan va quyen edit_devices.'

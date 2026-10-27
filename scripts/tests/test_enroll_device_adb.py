@@ -331,6 +331,37 @@ class DeviceNameTests(unittest.TestCase):
 
 
 class ExistingEnrollmentTests(unittest.TestCase):
+    def test_registration_succeeds_without_checkin_or_success_label(self):
+        from unittest.mock import Mock
+        device, client = Mock(), Mock()
+        state = {'kind': 'existing', 'deviceId': 'registered-id', 'server': 'https://mdm.example.com'}
+        device.enrollment_state.side_effect = [{'kind': 'new'}, state]
+        device.is_owner.return_value = True
+        client.request.return_value = {'id': 12, 'number': 'registered-id'}
+        with patch.object(module.time, 'sleep'):
+            self.assertEqual(module.wait_for_registration(device, client, state['server']), state)
+        client.request.assert_called_once_with('private/devices/number/registered-id')
+        device.nodes.assert_not_called()
+
+    def test_registration_rejects_another_server(self):
+        from unittest.mock import Mock
+        device, client = Mock(), Mock()
+        device.enrollment_state.return_value = {'kind': 'existing', 'deviceId': 'id', 'server': 'https://other.example'}
+        with self.assertRaisesRegex(ValueError, 'may chu khac'):
+            module.wait_for_registration(device, client, 'https://mdm.example')
+        client.request.assert_not_called()
+
+    def test_registration_requires_matching_server_record_and_owner(self):
+        from unittest.mock import Mock
+        for row, owner in [({'id': 1, 'number': 'other'}, True), ({'id': 1, 'number': 'id'}, False), (None, True)]:
+            device, client = Mock(), Mock()
+            device.enrollment_state.return_value = {'kind': 'existing', 'deviceId': 'id', 'server': 'https://mdm.example'}
+            device.is_owner.return_value = owner
+            client.request.return_value = row
+            with patch.object(module.time, 'monotonic', side_effect=[0, 0, 61]), patch.object(module.time, 'sleep'):
+                with self.assertRaisesRegex(ValueError, 'Chua xac minh'):
+                    module.wait_for_registration(device, client, 'https://mdm.example')
+
     def test_existing_main_flow_does_not_mint_or_fill_another_token(self):
         from unittest.mock import Mock
         device, client = Mock(), Mock()
@@ -347,9 +378,11 @@ class ExistingEnrollmentTests(unittest.TestCase):
                 patch.object(module, 'login'), patch.object(module, 'download_apk', return_value=Path('/test.apk')), \
                 patch.object(module, 'newest_published', return_value={'versionName': 'test', 'versionCode': 1045}), \
                 patch.object(module, 'verify_existing_enrollment') as verify, \
+                patch.object(module, 'wait_for_registration') as confirm, \
                 patch.object(module, 'mint_token') as mint, patch('builtins.print'):
             self.assertEqual(module.main(), 0)
-        verify.assert_called_once_with(device, client, state, 'https://mdm.example.com')
+        verify.assert_not_called()
+        confirm.assert_called_once_with(device, client, 'https://mdm.example.com')
         mint.assert_not_called()
         device.fill.assert_not_called()
 

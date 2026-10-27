@@ -24,6 +24,10 @@ Installation can take up to 180 seconds; keep the phone unlocked and check
 any installation or Play Protect prompts. Temporary empty UI Automator dumps
 are retried up to six times while the Agent screen becomes ready.
 Downloads of the APK are temporary and removed on exit.
+New enrollment is confirmed by the Agent's saved device ID/server, the matching
+server device record, and Device Owner. It does not wait for the next periodic
+check-in or depend on the visible connection-success label. An already registered
+device with valid Device Owner is confirmed without minting another token.
 
 Grant-Permissions.cmd: grant and verify Usage Access, Alarms & reminders, precise/background location, and enable GPS
 for an already installed Agent, without API login or another enrollment.
