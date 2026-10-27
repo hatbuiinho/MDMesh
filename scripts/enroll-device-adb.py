@@ -151,6 +151,9 @@ class Device:
                                  'Script khong tu go tai khoan hoac xoa du lieu.')
             label = ' '.join(command[:2])
             raise ValueError(f'ADB that bai o buoc {label}: {detail[:2000] or "khong co thong bao tu Android"}')
+        if args[0] == 'shell' and shlex.split(args[1])[:2] == ['uiautomator', 'dump']:
+            # Android 9 can report a null accessibility root on stderr with rc=0.
+            return result.stdout + result.stderr
         return result.stdout
 
     def shell(self, *args):
@@ -225,6 +228,24 @@ class Device:
         print('Da cap va xac minh: vi tri chinh xac, vi tri nen (Android 10+) va bat GPS.', flush=True)
 
     def nodes(self):
+        # Immediately after opening an Activity Android may still be replacing
+        # its accessibility window. A successful dump can then be empty.
+        last_error = 'cay giao dien rong'
+        for attempt in range(6):
+            try:
+                nodes = self._dump_nodes()
+                if nodes:
+                    return nodes
+            except (ValueError, ET.ParseError) as error:
+                if isinstance(error, ValueError) and not str(error).startswith('UI Automator'):
+                    raise
+                last_error = str(error)
+            if attempt < 5:
+                time.sleep(2)
+        raise ValueError('UI Automator khong doc duoc giao dien sau 6 lan thu. '
+                         'Mo khoa thiet bi, giu Agent o phia truoc va thu lai. ' + last_error)
+
+    def _dump_nodes(self):
         # Some Android builds only print a success message for /dev/tty and
         # discard the XML. Use a unique temporary file, read it, then remove it.
         remote = '/data/local/tmp/mdmesh-ui-' + uuid.uuid4().hex + '.xml'
@@ -246,7 +267,9 @@ class Device:
     def scroll(self, upward=False):
         size = re.findall(r'(\d+)x(\d+)', self.shell('wm', 'size'))[-1]
         width, height = map(int, size)
-        y1, y2 = int(height * .78), int(height * .3)
+        # Stay inside app content, above the bottom navigation, and move less
+        # than a screen so short forms/fields cannot be skipped.
+        y1, y2 = int(height * .7), int(height * .45)
         if upward:
             y1, y2 = y2, y1
         self.shell('input', 'swipe', str(width // 2), str(y1), str(width // 2), str(y2), '350')
@@ -306,11 +329,17 @@ class Device:
         self.shell('input', 'keyevent', 'KEYCODE_MOVE_END')
         self.shell('input', 'keyevent', *(['KEYCODE_DEL'] * (len(node.get('text', '')) + 1)))
         self.shell('input', 'text', text)
+        # Some Android 9 IMEs become the active accessibility window without
+        # exposing a root. Dismiss the IME before reading/verifying the form.
+        self.shell('input', 'keyevent', 'KEYCODE_BACK')
+        # Leave the EditText as well: on older Android builds the focused
+        # editor can retain a stale accessibility root even after IME closes.
+        # Tab moves focus normally; it does not submit the enrollment form.
+        self.shell('input', 'keyevent', 'KEYCODE_TAB')
         # Confirm text before submitting a one-time token.
         actual = self.find(lambda n: n.get('resource-id') == PACKAGE + ':id/' + name)
         if actual.get('text') != text:
             raise ValueError('Khong dien duoc du lieu chinh xac tren thiet bi; dung truoc khi gui dang ky.')
-        self.shell('input', 'keyevent', 'KEYCODE_BACK')
 
 
 def set_default_device_name(device, client, base, name):
@@ -414,9 +443,13 @@ def main():
         download_directory = tempfile.TemporaryDirectory(prefix='mdmesh-enroll-')
         print('Dang tai APK va kiem tra SHA256...', flush=True)
         apk = download_apk(published, Path(download_directory.name) / 'mdmesh-published.apk')
+        print('Da tai APK, SHA256 hop le.', flush=True)
+        print('Dang cai APK qua ADB (co the mat toi 180 giay). '
+              'Mo khoa thiet bi va kiem tra thong bao cai dat/Play Protect neu dang cho...', flush=True)
         installed = device.run('install', '-r', str(apk))
         if 'Success' not in installed:
             raise ValueError('ADB chua xac nhan cai APK thanh cong.')
+        print('Da cai APK thanh cong.', flush=True)
         if not device.is_owner():
             print('Dang thiet lap Device Owner...', flush=True)
             device.shell('dpm', 'set-device-owner', ADMIN)
@@ -435,11 +468,14 @@ def main():
         device.scroll(upward=True)
         device.fill('enrollment_server', base)
         # Verify the form is available BEFORE minting the token.
+        print('Dang tim o Ma dang ky; chi cuon neu o chua hien thi...', flush=True)
         device.find(lambda n: n.get('resource-id') == PACKAGE + ':id/enrollment_token')
         print('Dang tao token moi...', flush=True)
         token = mint_token(client)
+        print('Dang nhap va xac minh Ma dang ky...', flush=True)
         device.fill('enrollment_token', token)
         token = None
+        print('Da xac minh Ma dang ky. Dang tim nut Dang ky thiet bi...', flush=True)
         button = device.find(lambda n: n.get('class') == 'android.widget.Button' and n.get('text') == '\u0110\u0103ng k\xfd thi\u1ebft b\u1ecb')
         device.tap(button)
         print('Da gui dang ky. Dang cho Agent xac nhan...', flush=True)

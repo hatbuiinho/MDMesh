@@ -19,6 +19,10 @@ Setup.ps1 from the pinned python.org / Google HTTPS URLs in tools-manifest.json.
 Internet access to MDMesh is required to download the published APK and mint a
 fresh enrollment token. The highest published release versionCode is selected;
 local APKs are never used. APK SHA256 is verified before installation.
+The helper reports download/checksum and ADB installation as separate steps.
+Installation can take up to 180 seconds; keep the phone unlocked and check
+any installation or Play Protect prompts. Temporary empty UI Automator dumps
+are retried up to six times while the Agent screen becomes ready.
 Downloads of the APK are temporary and removed on exit.
 
 Grant-Permissions.cmd: grant and verify Usage Access, Alarms & reminders, precise/background location, and enable GPS

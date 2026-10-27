@@ -149,10 +149,73 @@ class EnrollmentTests(unittest.TestCase):
     def test_ui_temp_file_is_removed_when_xml_is_invalid(self):
         device = module.Device('adb', 'test')
         with patch.object(device, 'shell', return_value='') as shell, \
-                patch.object(device, 'run', return_value='not xml'):
+                patch.object(device, 'run', return_value='not xml'), patch.object(module.time, 'sleep'):
             with self.assertRaisesRegex(ValueError, 'XML'):
                 device.nodes()
             self.assertEqual(shell.call_args_list[-1].args[:2], ('rm', '-f'))
+
+    def test_ui_dump_preserves_stderr_when_android_returns_success(self):
+        result = subprocess.CompletedProcess([], 0, '',
+            'ERROR: null root node returned by UiTestAutomationBridge.')
+        with patch.object(module.subprocess, 'run', return_value=result):
+            self.assertIn('null root node', module.Device('adb', 'test').shell('uiautomator', 'dump', '/tmp/ui.xml'))
+
+    def test_fill_dismisses_keyboard_before_verifying_text(self):
+        device = module.Device('adb', 'test')
+        node = module.ET.Element('node', {'text': '', 'bounds': '[0,0][100,100]'})
+        actual = module.ET.Element('node', {'text': 'https://example.com'})
+        with patch.object(device, 'shell') as shell:
+            def find(predicate):
+                if not shell.call_args_list:
+                    return node
+                self.assertEqual(shell.call_args_list[-2].args,
+                                 ('input', 'keyevent', 'KEYCODE_BACK'))
+                self.assertEqual(shell.call_args_list[-1].args,
+                                 ('input', 'keyevent', 'KEYCODE_TAB'))
+                return actual
+            with patch.object(device, 'find', side_effect=find):
+                device.fill('enrollment_server', 'https://example.com')
+
+    def test_visible_token_field_does_not_scroll(self):
+        device = module.Device('adb', 'test')
+        node = module.ET.Element('node', {'resource-id': module.PACKAGE + ':id/enrollment_token',
+                                        'bounds': '[20,300][500,400]'})
+        with patch.object(device, 'nodes', return_value=[node]), patch.object(device, 'scroll') as scroll:
+            self.assertIs(device.find(lambda n: n.get('resource-id') == module.PACKAGE + ':id/enrollment_token'), node)
+            scroll.assert_not_called()
+
+    def test_hidden_token_field_scrolls_until_visible_then_stops(self):
+        device = module.Device('adb', 'test')
+        node = module.ET.Element('node', {'resource-id': module.PACKAGE + ':id/enrollment_token',
+                                        'bounds': '[20,300][500,400]'})
+        with patch.object(device, 'nodes', side_effect=[[], [node]]), patch.object(device, 'scroll') as scroll:
+            self.assertIs(device.find(lambda n: n.get('resource-id') == module.PACKAGE + ':id/enrollment_token'), node)
+            scroll.assert_called_once_with()
+
+    def test_ui_recovers_after_three_null_root_errors(self):
+        device = module.Device('adb', 'test')
+        error = 'ERROR: null root node returned by UiTestAutomationBridge.'
+        with patch.object(device, 'shell', side_effect=[error, '', error, '', error, '', 'ok', '']), \
+                patch.object(device, 'run', return_value='<hierarchy><node text="Agent" /></hierarchy>'), \
+                patch.object(device, 'scroll') as scroll, \
+                patch.object(module.time, 'sleep'):
+            self.assertEqual(device.nodes()[0].get('text'), 'Agent')
+            scroll.assert_not_called()
+
+    def test_ui_retries_transient_empty_dump_after_launch(self):
+        device = module.Device('adb', 'test')
+        xml = '<hierarchy><node text="Agent" /></hierarchy>'
+        with patch.object(device, 'shell', return_value=''), \
+                patch.object(device, 'run', side_effect=['', xml]) as run, \
+                patch.object(module.time, 'sleep'):
+            self.assertEqual(device.nodes()[0].get('text'), 'Agent')
+            self.assertEqual(run.call_count, 2)
+
+    def test_ui_retries_empty_accessibility_tree(self):
+        device = module.Device('adb', 'test')
+        with patch.object(device, '_dump_nodes', side_effect=[[], [ET_node := module.ET.Element('node')]]), \
+                patch.object(module.time, 'sleep'):
+            self.assertEqual(device.nodes(), [ET_node])
 
     def test_special_permissions_are_granted_and_verified_for_current_user(self):
         device = module.Device('adb', 'test')
