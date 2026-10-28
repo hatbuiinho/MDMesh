@@ -15,6 +15,15 @@ installation/enrollment uses the server.
 Existing action flags still run directly. Use `--enroll` to run installation and
 enrollment directly without the menu. `--help` lists all options.
 
+If Android blocks Device Owner because accounts remain during enrollment, the
+helper offers guided account removal immediately. Choose `1` to select an account
+and handle it on the phone, `r` to retry Device Owner, or `q` to stop enrollment.
+After the account list is empty it retries Device Owner and verifies ownership
+before continuing permissions and registration. It keeps the installed APK and
+does not repeat download/installation during this recovery. If an app recreates
+an account, the same choices appear again. Other Device Owner errors are reported
+without treating them as account-removal problems.
+
 To inspect Android accounts without server login, APK installation, or enrollment:
 
 ```sh

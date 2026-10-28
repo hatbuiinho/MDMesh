@@ -133,6 +133,10 @@ def download_apk(metadata, destination, opener=None):
     return destination
 
 
+class AccountsBlockDeviceOwner(ValueError):
+    """Android explicitly rejected Device Owner because accounts remain."""
+
+
 class Device:
     def __init__(self, adb, serial):
         self.adb, self.serial = adb, serial
@@ -146,7 +150,7 @@ class Device:
                 raise ValueError('ADB khong nhap duoc du lieu tren thiet bi; mo khoa man hinh roi thu lai.')
             detail = (result.stderr + '\n' + result.stdout).strip()
             if command[:2] == ['dpm', 'set-device-owner'] and 'already some accounts' in detail:
-                raise ValueError('Khong the thiet lap Device Owner vi thiet bi dang co tai khoan. '
+                raise AccountsBlockDeviceOwner('Khong the thiet lap Device Owner vi thiet bi dang co tai khoan. '
                                  '\n' + self.account_diagnostics())
             label = ' '.join(command[:2])
             raise ValueError(f'ADB that bai o buoc {label}: {detail[:2000] or "khong co thong bao tu Android"}')
@@ -217,19 +221,22 @@ class Device:
                 continue
         raise ValueError('Khong mo duoc Cai dat cho user/profile nay. Mo khoa va mo Cai dat thu cong trong dung profile.')
 
-    def assist_accounts(self):
+    def assist_accounts(self, enrolling=False):
         print('Ho tro go tai khoan: ban thao tac va xac nhan tren dien thoai. '
               'Script chi mo Cai dat va doc lai danh sach; khong xoa du lieu/go ung dung.')
         while True:
             accounts = self.current_accounts()
             if not accounts:
-                print('Khong thay tai khoan trong lan kiem tra nay. Chay lai enrollment de Android kiem tra Device Owner.')
-                return
+                print('Khong thay tai khoan trong lan kiem tra nay. ' +
+                      ('Dang tiep tuc thiet lap Device Owner...' if enrolling else
+                       'Chon 1 trong menu chinh de Android kiem tra Device Owner.'))
+                return True
             for index, account in enumerate(accounts, 1):
                 print(f'  {index}. {self.account_label(account)}')
-            choice = ask('Chon tai khoan (r: tai lai, q: thoat)', 'q').lower()
+            choice = ask('Chon tai khoan (r: tai lai, q: dung enroll)' if enrolling else
+                         'Chon tai khoan (r: tai lai, q: thoat)', 'q').lower()
             if choice == 'q':
-                return
+                return False
             if choice == 'r':
                 continue
             if not choice.isdigit() or not 1 <= int(choice) <= len(accounts):
@@ -257,6 +264,28 @@ class Device:
                 print(f'So tai khoan cung loai da giam: {before} -> {after}; van con tai khoan can xu ly.')
             else:
                 print('Van con tai khoan cung loai trong user/profile da chon; chua xac nhan go thanh cong (co the da tu tao lai).')
+
+    def ensure_device_owner(self):
+        while True:
+            try:
+                self.shell('dpm', 'set-device-owner', ADMIN)
+                if not self.is_owner():
+                    raise ValueError('Android chua xac nhan MDMesh la Device Owner; dung enroll de kiem tra.')
+                return True
+            except AccountsBlockDeviceOwner:
+                print('Android chua cho phep thiet lap Device Owner vi con tai khoan. '
+                      'APK da cai; xu ly tai khoan xong se tiep tuc tai buoc nay.')
+                while True:
+                    choice = ask('1: ho tro go tai khoan, r: thu lai Device Owner, q: dung enroll', '1').lower()
+                    if choice == 'q':
+                        return False
+                    if choice == 'r':
+                        break
+                    if choice == '1':
+                        if not self.assist_accounts(enrolling=True):
+                            return False
+                        break
+                    print('Lua chon khong hop le.')
 
     def account_diagnostics(self):
         """Read current accounts only; never print dump history, sessions or tokens."""
@@ -645,7 +674,9 @@ def main(argv=None):
         restoring_owner = not device.is_owner()
         if restoring_owner:
             print('Dang thiet lap Device Owner...', flush=True)
-            device.shell('dpm', 'set-device-owner', ADMIN)
+            if not device.ensure_device_owner():
+                print('Da dung enroll. APK da cai duoc giu lai; chua tiep tuc cap quyen hoac dang ky.')
+                return 0
         if not device.is_owner():
             raise ValueError('Chua co Device Owner. Kiem tra tai khoan/owner cu. Script khong xoa du lieu.')
         device.grant_special_access()

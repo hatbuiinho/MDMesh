@@ -216,6 +216,45 @@ User UserInfo{10:Work:30}:
         device.assist_accounts.assert_called_once_with()
         env.assert_not_called()
 
+    def test_owner_accounts_recovery_retries_without_installing(self):
+        device = module.Device('adb', 'test')
+        with patch.object(device, 'shell', side_effect=[module.AccountsBlockDeviceOwner('accounts'), 'Success']) as shell, \
+                patch.object(device, 'is_owner', return_value=True), \
+                patch.object(device, 'assist_accounts', return_value=True) as assist, \
+                patch.object(module, 'ask', return_value='1'), patch('builtins.print'):
+            self.assertTrue(device.ensure_device_owner())
+        assist.assert_called_once_with(enrolling=True)
+        self.assertEqual(shell.call_args_list, [unittest.mock.call('dpm', 'set-device-owner', module.ADMIN)] * 2)
+
+    def test_owner_accounts_recovery_cancels_without_retry(self):
+        device = module.Device('adb', 'test')
+        with patch.object(device, 'shell', side_effect=module.AccountsBlockDeviceOwner('accounts')) as shell, \
+                patch.object(device, 'assist_accounts', return_value=False), \
+                patch.object(module, 'ask', return_value='1'), patch('builtins.print'):
+            self.assertFalse(device.ensure_device_owner())
+        self.assertEqual(shell.call_count, 1)
+
+    def test_owner_recreated_accounts_can_retry_then_cancel(self):
+        device = module.Device('adb', 'test')
+        with patch.object(device, 'shell', side_effect=module.AccountsBlockDeviceOwner('accounts')) as shell, \
+                patch.object(module, 'ask', side_effect=['invalid', 'r', 'q']), patch('builtins.print'):
+            self.assertFalse(device.ensure_device_owner())
+        self.assertEqual(shell.call_count, 2)
+
+    def test_owner_other_errors_do_not_start_account_assistance(self):
+        device = module.Device('adb', 'test')
+        with patch.object(device, 'shell', side_effect=ValueError('another owner')), \
+                patch.object(device, 'assist_accounts') as assist:
+            with self.assertRaisesRegex(ValueError, 'another owner'):
+                device.ensure_device_owner()
+        assist.assert_not_called()
+
+    def test_owner_success_requires_verification(self):
+        device = module.Device('adb', 'test')
+        with patch.object(device, 'shell', return_value='Success'), patch.object(device, 'is_owner', return_value=False):
+            with self.assertRaisesRegex(ValueError, 'chua xac nhan'):
+                device.ensure_device_owner()
+
     def test_no_arguments_menu_can_exit_without_adb_or_server(self):
         with patch.object(module, 'ask', return_value='0'), \
                 patch.object(module, 'select_device') as select, \

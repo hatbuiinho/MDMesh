@@ -13,6 +13,12 @@ MDMesh Enroll - Windows portable (Windows 10/11 x64)
      0. Exit.
    Choose the function, then the device. Completed/failed actions return to the menu.
    Only enrollment requires MDMesh server credentials. Ctrl+C cancels the script.
+   If accounts block Device Owner during enrollment, choose 1 at that prompt to
+   open guided account removal immediately, r to retry, or q to stop enrollment.
+   After accounts are gone, the helper retries and verifies Device Owner, then
+   continues enrollment without downloading/installing the APK again. You still
+   remove/sign out of accounts yourself on the phone. The installed APK is kept
+   if you stop; no further permission grants or registration are attempted.
 5. Keep MDMesh Agent visible and the phone unlocked until enrollment completes.
    Enrollment automatically grants precise/background location and enables GPS,
    alongside Usage Access and Alarms & reminders. Each permission is verified.
