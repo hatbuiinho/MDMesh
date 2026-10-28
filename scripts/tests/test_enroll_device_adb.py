@@ -118,8 +118,129 @@ class EnrollmentTests(unittest.TestCase):
         result = subprocess.CompletedProcess([], 255, '',
             'Not allowed to set the device owner because there are already some accounts on the device.')
         with patch.object(module.subprocess, 'run', return_value=result):
-            with self.assertRaisesRegex(ValueError, 'Go tat ca tai khoan'):
+            with self.assertRaisesRegex(ValueError, 'Khong the thiet lap Device Owner'):
                 module.Device('adb', 'test').shell('dpm', 'set-device-owner', module.ADMIN)
+
+    def test_account_diagnostics_only_lists_current_accounts_with_profile(self):
+        device = module.Device('adb', 'test')
+        dump = '''User UserInfo{0:Owner:4c13}:
+  Accounts: 2
+    Account {name=XXXXXXXXX, type=com.hihonor.id}
+    Account {name=XXXXXXXXX, type=com.whatsapp}
+  Accounts History
+  9,action_account_remove,old-google-account
+  RegisteredServicesCache: 1 services
+    ServiceInfo: AuthenticatorDescription {type=com.google}
+User UserInfo{10:Work:30}:
+  Accounts: 1
+    Account {name=work@example.com, type=custom.auth}
+'''
+        with patch.object(device, 'shell', side_effect=[dump, 'Users:\nUserInfo{0:Owner:4c13}\nUserInfo{10:Work:30}']):
+            report = device.account_diagnostics()
+        for expected in ('HONOR ID', 'WhatsApp', 'Android da an ten', 'user 10 (Work)', 'custom.auth'):
+            self.assertIn(expected, report)
+        self.assertNotIn('old-google-account', report)
+        self.assertNotIn('com.google', report)
+
+    def test_account_diagnostics_distinguishes_empty_and_unreadable(self):
+        device = module.Device('adb', 'test')
+        for dump, expected in [('User UserInfo{0:Owner:13}:\n  Accounts: 0', 'Khong thay tai khoan'),
+                               ('Permission Denial', 'Khong doc duoc')]:
+            with patch.object(device, 'shell', side_effect=[dump, 'Users:']):
+                report = device.account_diagnostics()
+                self.assertIn(expected, report)
+                self.assertNotIn('--diagnose-accounts', report)
+                self.assertNotIn('--manage-accounts', report)
+                self.assertNotIn('HONOR/HUAWEI ID:', report)
+                self.assertNotIn('WhatsApp co the', report)
+                if 'Accounts: 0' in dump:
+                    self.assertIn('chon 1', report)
+                    self.assertNotIn('chon 3', report)
+        with patch.object(device, 'shell', side_effect=ValueError('private raw dump')):
+            report = device.account_diagnostics()
+        self.assertIn('Khong doc duoc', report)
+        self.assertNotIn('private raw dump', report)
+
+    def test_current_accounts_rejects_incomplete_or_unreadable_dump(self):
+        device = module.Device('adb', 'test')
+        for dump in ('Permission Denial', 'User UserInfo{0:Owner:13}:\n Accounts: 1'):
+            with patch.object(device, 'shell', return_value=dump):
+                with self.assertRaises(ValueError):
+                    device.current_accounts()
+
+    def test_current_accounts_preserves_profile_and_ignores_services(self):
+        device = module.Device('adb', 'test')
+        with patch.object(device, 'shell', return_value='''User UserInfo{10:Work:30}:
+ Accounts: 1
+ Account {name=XXXXXXXXX, type=com.whatsapp}
+ ServiceInfo: AuthenticatorDescription {type=com.google}
+'''):
+            self.assertEqual(device.current_accounts(), [dict(user='10', user_name='Work', name='XXXXXXXXX', type='com.whatsapp')])
+
+    def test_open_account_settings_falls_back_on_android_error_with_zero_exit(self):
+        device = module.Device('adb', 'test')
+        account = dict(user='10', type='com.whatsapp')
+        with patch.object(device, 'shell', side_effect=['Error: Activity not started', 'Starting: Intent']), patch('sys.stdout', new=io.StringIO()):
+            device.open_account_settings(account)
+            self.assertEqual(device.shell.call_args_list, [
+                unittest.mock.call('am', 'start', '--user', '10', '-a', 'android.settings.SYNC_SETTINGS'),
+                unittest.mock.call('am', 'start', '--user', '10', '-a', 'android.settings.SETTINGS')])
+
+    def test_manage_accounts_verifies_and_never_removes_data(self):
+        device = module.Device('adb', 'test')
+        account = dict(user='0', user_name='Owner', name='XXXXXXXXX', type='com.whatsapp')
+        with patch.object(device, 'current_accounts', side_effect=[[account], [], []]), \
+                patch.object(device, 'open_account_settings') as opened, \
+                patch.object(device, 'shell') as shell, \
+                patch.object(module, 'ask', side_effect=['1', '']), patch('sys.stdout', new=io.StringIO()) as output:
+            device.assist_accounts()
+        opened.assert_called_once_with(account)
+        shell.assert_not_called()
+        self.assertIn('Khong con tai khoan loai nay', output.getvalue())
+
+    def test_manage_accounts_does_not_claim_success_for_recreated_account(self):
+        device = module.Device('adb', 'test')
+        account = dict(user='0', user_name='Owner', name='XXXXXXXXX', type='com.whatsapp')
+        with patch.object(device, 'current_accounts', return_value=[account]), \
+                patch.object(device, 'open_account_settings'), \
+                patch.object(module, 'ask', side_effect=['1', '', 'q']), patch('sys.stdout', new=io.StringIO()) as output:
+            device.assist_accounts()
+        self.assertIn('chua xac nhan go thanh cong', output.getvalue())
+
+    def test_manage_accounts_skips_server_and_installation(self):
+        device = unittest.mock.Mock()
+        with patch.object(module.sys, 'argv', ['enroll-device-adb.py', '--manage-accounts']), \
+                patch.object(module, 'select_device', return_value=device), \
+                patch.object(module, 'read_env') as env:
+            self.assertEqual(module.main(), 0)
+        device.assist_accounts.assert_called_once_with()
+        env.assert_not_called()
+
+    def test_no_arguments_menu_can_exit_without_adb_or_server(self):
+        with patch.object(module, 'ask', return_value='0'), \
+                patch.object(module, 'select_device') as select, \
+                patch.object(module, 'read_env') as env, patch('builtins.print'):
+            self.assertEqual(module.main([]), 0)
+        select.assert_not_called()
+        env.assert_not_called()
+
+    def test_menu_dispatches_actions_and_returns_after_failure(self):
+        with patch.object(module, 'ask', side_effect=['invalid', '1', '2', '3', '4', '0']), \
+                patch.object(module, 'main', side_effect=[1, 0, 0, 0]) as run, patch('builtins.print'):
+            self.assertEqual(module.action_menu(['--serial', 'test']), 0)
+        self.assertEqual(run.call_args_list, [unittest.mock.call(['--serial', 'test', mode])
+                         for mode in ('--enroll', '--diagnose-accounts', '--manage-accounts', '--permissions-only')])
+
+    def test_menu_diagnostics_returns_to_menu_without_server(self):
+        device = unittest.mock.Mock()
+        device.account_diagnostics.return_value = 'accounts report'
+        with patch.object(module, 'ask', side_effect=['2', '0']), \
+                patch.object(module, 'select_device', return_value=device) as select, \
+                patch.object(module, 'read_env') as env, patch('builtins.print'):
+            self.assertEqual(module.main(['--serial', 'test']), 0)
+        select.assert_called_once_with('test')
+        device.account_diagnostics.assert_called_once_with()
+        env.assert_not_called()
 
     def test_adb_text_failure_never_exposes_token(self):
         secret = 'private-enrollment-token'
@@ -370,7 +491,7 @@ class ExistingEnrollmentTests(unittest.TestCase):
         device.is_owner.return_value = True
         state = {'kind': 'existing', 'server': 'https://mdm.example.com', 'deviceId': 'existing-id'}
         device.enrollment_state.return_value = state
-        with patch.object(module.sys, 'argv', ['enroll-device-adb.py']), \
+        with patch.object(module.sys, 'argv', ['enroll-device-adb.py', '--enroll']), \
                 patch.object(module, 'read_env', return_value={'MDM_ADMIN_USERNAME': 'admin', 'MDM_ADMIN_PASSWORD': 'test'}), \
                 patch.object(module, 'ask', side_effect=['https://mdm.example.com', 'y']), \
                 patch.object(module, 'select_device', return_value=device), \

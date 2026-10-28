@@ -4,7 +4,9 @@
 No login is required. The package contains the latest enrollment helper from the
 running server image, Python and ADB (verified against the pinned tools manifest).
 Its `.env` contains no saved admin password; users enter their console credentials
-when running `Enroll.cmd`.
+when selecting enrollment in the `Enroll.cmd` main menu. The menu also offers
+account diagnostics, guided account removal with confirmation on the phone, and
+Agent permission grants. Account functions do not require server login.
 
 ```sh
 curl --fail --location --output MDMesh-Enroll-Windows.zip \

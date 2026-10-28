@@ -145,10 +145,9 @@ class Device:
             if command[:2] == ['input', 'text']:
                 raise ValueError('ADB khong nhap duoc du lieu tren thiet bi; mo khoa man hinh roi thu lai.')
             detail = (result.stderr + '\n' + result.stdout).strip()
-            if 'already some accounts' in detail:
+            if command[:2] == ['dpm', 'set-device-owner'] and 'already some accounts' in detail:
                 raise ValueError('Khong the thiet lap Device Owner vi thiet bi dang co tai khoan. '
-                                 'Go tat ca tai khoan trong Cai dat Android -> Tai khoan, roi chay lai script. '
-                                 'Script khong tu go tai khoan hoac xoa du lieu.')
+                                 '\n' + self.account_diagnostics())
             label = ' '.join(command[:2])
             raise ValueError(f'ADB that bai o buoc {label}: {detail[:2000] or "khong co thong bao tu Android"}')
         if args[0] == 'shell' and shlex.split(args[1])[:2] == ['uiautomator', 'dump']:
@@ -158,6 +157,141 @@ class Device:
 
     def shell(self, *args):
         return self.run('shell', shlex.join(args))
+
+    def current_accounts(self):
+        dump = self.shell('dumpsys', 'account')
+        accounts = []
+        user, user_name = None, 'khong ro'
+        if not re.search(r'(?m)^\s*Accounts:\s*\d+\s*$', dump):
+            raise ValueError('Android khong tra danh sach tai khoan doc duoc; khong the ket luan la khong co tai khoan.')
+        for line in dump.splitlines():
+            header = re.match(r'\s*User UserInfo\{(\d+):(.+):[0-9a-fA-F]+\}:?', line)
+            if header:
+                user, user_name = header.groups()
+            account = re.fullmatch(r'\s*Account \{name=(.*), type=([^}]+)\}\s*', line)
+            if account:
+                name, kind = account.groups()
+                accounts.append({'user': user, 'user_name': user_name, 'name': name, 'type': kind})
+        counts = sum(map(int, re.findall(r'(?m)^\s*Accounts:\s*(\d+)\s*$', dump)))
+        if counts != len(accounts):
+            raise ValueError('Danh sach tai khoan bi an hoac khong day du; thu mo khoa dien thoai va kiem tra lai.')
+        return accounts
+
+    @staticmethod
+    def account_label(account):
+        labels = {'com.hihonor.id': 'HONOR ID', 'com.huawei.hwid': 'HUAWEI ID',
+                  'com.whatsapp': 'WhatsApp', 'com.google': 'Google', 'com.zing.zalo': 'Zalo',
+                  'com.samsung.android.mobileservice': 'Samsung account'}
+        name = account['name']
+        if re.fullmatch(r'[Xx*•]+', name):
+            name = 'Android da an ten dang nhap'
+        return (f"{labels.get(account['type'], 'Ung dung/loai tai khoan chua nhan dien')} | "
+                f"{account['type']} | {name} | user {account['user']} ({account['user_name']})")
+
+    def open_account_settings(self, account):
+        user = account['user']
+        if user is None or not user.isdigit():
+            raise ValueError('Khong xac dinh duoc user chua tai khoan; hay mo Cai dat thu cong.')
+        # No private OEM activities or fabricated account names (OEMs can mask names).
+        # Open the provider's settings when available, otherwise the account list.
+        manufacturer = account['type'] in ('com.hihonor.id', 'com.huawei.hwid')
+        actions = []
+        if manufacturer:
+            actions.extend([('android.intent.action.MAIN', '-c', 'android.intent.category.LAUNCHER', '-p', account['type']),
+                            ('android.settings.SETTINGS',)])
+        else:
+            actions.extend([('android.settings.SYNC_SETTINGS',), ('android.settings.SETTINGS',)])
+        for action in actions:
+            try:
+                output = self.shell('am', 'start', '--user', user, '-a', *action)
+                if re.search(r'(?i)error:|exception|unable to resolve|permission denial', output):
+                    continue
+                if action[0] == 'android.intent.action.MAIN':
+                    print('Da mo ung dung tai khoan hang; tim muc Dang xuat.')
+                elif action[0] == 'android.settings.SYNC_SETTINGS':
+                    print('Da mo danh sach tai khoan. Chon dung loai/tai khoan tren dien thoai.')
+                else:
+                    print('Da mo Cai dat chung; tim Tai khoan hoac tai khoan hang.')
+                return
+            except (ValueError, subprocess.TimeoutExpired, OSError):
+                continue
+        raise ValueError('Khong mo duoc Cai dat cho user/profile nay. Mo khoa va mo Cai dat thu cong trong dung profile.')
+
+    def assist_accounts(self):
+        print('Ho tro go tai khoan: ban thao tac va xac nhan tren dien thoai. '
+              'Script chi mo Cai dat va doc lai danh sach; khong xoa du lieu/go ung dung.')
+        while True:
+            accounts = self.current_accounts()
+            if not accounts:
+                print('Khong thay tai khoan trong lan kiem tra nay. Chay lai enrollment de Android kiem tra Device Owner.')
+                return
+            for index, account in enumerate(accounts, 1):
+                print(f'  {index}. {self.account_label(account)}')
+            choice = ask('Chon tai khoan (r: tai lai, q: thoat)', 'q').lower()
+            if choice == 'q':
+                return
+            if choice == 'r':
+                continue
+            if not choice.isdigit() or not 1 <= int(choice) <= len(accounts):
+                print('Lua chon khong hop le.')
+                continue
+            account = accounts[int(choice) - 1]
+            print('Dang xu ly: ' + self.account_label(account))
+            if account['type'] == 'com.whatsapp':
+                print('Chi go tai khoan dong bo Android; KHONG chon Xoa tai khoan WhatsApp. '
+                      'Ung dung co the tao lai tai khoan. Sao luu chat truoc khi can nhac go ung dung.')
+            elif account['type'] in ('com.hihonor.id', 'com.huawei.hwid'):
+                print('Dang xuat tai khoan hang trong Cai dat; nhap mat khau/xac thuc tren dien thoai neu duoc yeu cau.')
+            try:
+                self.open_account_settings(account)
+            except ValueError as error:
+                print(str(error))
+            ask('Xu ly tren dien thoai xong, nhan Enter de kiem tra lai')
+            remaining = self.current_accounts()
+            # Masked login names cannot identify an individual account reliably.
+            before = sum(a['user'] == account['user'] and a['type'] == account['type'] for a in accounts)
+            after = sum(a['user'] == account['user'] and a['type'] == account['type'] for a in remaining)
+            if after == 0:
+                print('Khong con tai khoan loai nay trong user/profile da chon o lan kiem tra nay.')
+            elif after < before:
+                print(f'So tai khoan cung loai da giam: {before} -> {after}; van con tai khoan can xu ly.')
+            else:
+                print('Van con tai khoan cung loai trong user/profile da chon; chua xac nhan go thanh cong (co the da tu tao lai).')
+
+    def account_diagnostics(self):
+        """Read current accounts only; never print dump history, sessions or tokens."""
+        lines = ['Tai khoan Android (khong phai tai khoan admin MDMesh):']
+        accounts = None
+        try:
+            accounts = self.current_accounts()
+            for account in accounts:
+                lines.append('  - ' + self.account_label(account))
+            if not accounts:
+                lines.append('  Khong thay tai khoan Android trong lan kiem tra nay.')
+        except (ValueError, subprocess.TimeoutExpired, OSError):
+            lines.append('  Khong doc duoc day du danh sach tai khoan; khong the ket luan la khong co tai khoan.')
+        try:
+            users = self.shell('pm', 'list', 'users')
+            for uid, name in re.findall(r'UserInfo\{(\d+):(.+):[0-9a-fA-F]+\}', users):
+                lines.append(f'  Android user/profile: {uid} ({name})')
+        except (ValueError, subprocess.TimeoutExpired, OSError):
+            lines.append('  Khong doc duoc danh sach Android user/profile.')
+        if accounts:
+            kinds = {account['type'] for account in accounts}
+            lines.append('Go tai khoan duoc liet ke trong dung user/profile, roi kiem tra lai.')
+            if kinds & {'com.hihonor.id', 'com.huawei.hwid'}:
+                lines.append('HONOR/HUAWEI ID: vao muc tai khoan hang o dau man hinh Cai dat de dang xuat.')
+            if 'com.whatsapp' in kinds:
+                lines.append('WhatsApp co the tao lai tai khoan dong bo. Khong chon Xoa tai khoan WhatsApp; '
+                             'sao luu va kiem tra khoi phuc chat truoc khi can nhac go ung dung.')
+            lines.append('Trong menu chinh, chon 3 de mo Cai dat va duoc ho tro go tai khoan.')
+        elif accounts is not None:
+            lines.append('Khong can go tai khoan o buoc nay. Trong menu chinh, chon 1 de cai APK va enroll; '
+                         'Android se kiem tra cac dieu kien Device Owner con lai.')
+        else:
+            lines.append('Mo khoa dien thoai va user/profile, kiem tra ket noi ADB roi thu lai.')
+        lines.append('Trong menu chinh, chon 2 de kiem tra lai tai khoan.')
+        return '\n'.join(lines)
 
     def is_owner(self):
         policy = self.shell('dumpsys', 'device_policy')
@@ -432,15 +566,50 @@ def select_device(requested_serial):
     return Device(adb, serial)
 
 
-def main():
+def action_menu(arguments):
+    actions = {'1': '--enroll', '2': '--diagnose-accounts',
+               '3': '--manage-accounts', '4': '--permissions-only'}
+    while True:
+        print('\nMDMesh - Cong cu ADB\n'
+              '  1. Cai APK moi nhat va enroll thiet bi\n'
+              '  2. Kiem tra tai khoan Android va user/profile\n'
+              '  3. Ho tro go tai khoan (thao tac tren dien thoai)\n'
+              '  4. Cap va kiem tra quyen Agent, bat GPS\n'
+              '  0. Thoat')
+        choice = ask('Chon chuc nang', '0')
+        if choice == '0':
+            return 0
+        if choice not in actions:
+            print('Lua chon khong hop le. Chon tu 0 den 4.')
+            continue
+        result = main([*arguments, actions[choice]])
+        if result == 130:
+            return result
+        print('\nDa quay lai menu chinh.')
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial')
-    parser.add_argument('--permissions-only', action='store_true', help='Cap Usage Access, Chuong bao/loi nhac, quyen vi tri va bat GPS; khong cai APK hoac enroll')
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument('--enroll', action='store_true', help='Cai APK moi nhat va enroll truc tiep, bo qua menu')
+    modes.add_argument('--diagnose-accounts', action='store_true', help='Chi doc tai khoan va user/profile Android; khong cai APK hoac enroll')
+    modes.add_argument('--manage-accounts', action='store_true', help='Chon tai khoan, mo Cai dat de ban go va kiem tra lai; khong tu xoa tai khoan')
+    modes.add_argument('--permissions-only', action='store_true', help='Cap Usage Access, Chuong bao/loi nhac, quyen vi tri va bat GPS; khong cai APK hoac enroll')
     parser.add_argument('--base-url')
     parser.add_argument('--env-file', type=Path, default=ROOT / '.env')
-    args = parser.parse_args()
+    arguments = sys.argv[1:] if argv is None else argv
+    args = parser.parse_args(arguments)
     download_directory = None
     try:
+        if not (args.enroll or args.manage_accounts or args.diagnose_accounts or args.permissions_only):
+            return action_menu(arguments)
+        if args.manage_accounts:
+            select_device(args.serial).assist_accounts()
+            return 0
+        if args.diagnose_accounts:
+            print(select_device(args.serial).account_diagnostics())
+            return 0
         if args.permissions_only:
             select_device(args.serial).grant_special_access()
             return 0

@@ -284,9 +284,12 @@ to update devices. This command does not change the enrollment APK URL or rebuil
 
 The portable distribution runs on Windows 10/11 x64 without installing Python,
 Android Studio or modifying PATH. Extract the whole ZIP and double-click
-`Enroll.cmd`. It uses the published server APK and the same API enrollment flow
-as the shell helper. `Grant-Permissions.cmd` only grants Usage Access and
-Alarms & reminders. Tools are pinned by SHA256 and included in the full bundle;
+`Enroll.cmd` to choose enrollment, account diagnostics, guided account removal,
+or Agent permission grants from the main menu. It uses the published server APK
+and the same API enrollment flow as the shell helper. `Grant-Permissions.cmd`
+grants Usage Access, Alarms & reminders, precise/background location and enables
+GPS. `Diagnose-Accounts.cmd` and `Manage-Accounts.cmd` open the account functions
+directly without server login. Tools are pinned by SHA256 and included in the full bundle;
 `Setup.cmd` verifies/restores them from official Python/Google HTTPS downloads.
 Some phones require the manufacturer's Windows USB driver.
 

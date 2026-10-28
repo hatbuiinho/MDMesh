@@ -34,6 +34,10 @@ class PortableTests(unittest.TestCase):
                 self.assertEqual(z.read('MDMesh-Enroll/app/scripts/enroll-device-adb.py'),
                                  (ROOT / 'scripts/enroll-device-adb.py').read_bytes())
                 self.assertIn(b'--permissions-only', z.read('MDMesh-Enroll/Grant-Permissions.cmd'))
+                self.assertIn(b'--diagnose-accounts', z.read('MDMesh-Enroll/Diagnose-Accounts.cmd'))
+                self.assertIn(b'--manage-accounts', z.read('MDMesh-Enroll/Manage-Accounts.cmd'))
+                self.assertNotIn(b'--enroll', z.read('MDMesh-Enroll/Enroll.cmd'))
+                self.assertIn(b'main menu', z.read('MDMesh-Enroll/README.txt'))
                 self.assertEqual(z.read('MDMesh-Enroll/.env').decode(), config)
                 self.assertFalse(any('keystore' in name for name in z.namelist()))
             self.assertIn(module.checksum(archive), (archive.parent / 'SHA256SUMS').read_text())

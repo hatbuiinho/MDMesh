@@ -1,11 +1,18 @@
 MDMesh Enroll - Windows portable (Windows 10/11 x64)
 
 1. Extract the whole ZIP to a writable folder (do not run inside the ZIP).
-2. Open .env in Notepad. Set MDM_ADMIN_USERNAME and MDM_ADMIN_PASSWORD.
-   A blank password enables a hidden password prompt. Do not use shell escapes.
+2. For enrollment, optionally set MDM_ADMIN_USERNAME in .env using Notepad.
+   Leave MDM_ADMIN_PASSWORD blank to enter it at a hidden prompt. Do not use shell escapes.
 3. Enable USB debugging on the phone, connect a data-capable cable, unlock it,
    and accept the computer's RSA authorization prompt.
-4. Double-click Enroll.cmd and choose your device.
+4. Double-click Enroll.cmd to open the main menu:
+     1. Install the latest APK and enroll a device.
+     2. Inspect Android accounts and users/profiles.
+     3. Guided account removal (you confirm on the phone).
+     4. Grant/verify Agent permissions and enable GPS.
+     0. Exit.
+   Choose the function, then the device. Completed/failed actions return to the menu.
+   Only enrollment requires MDMesh server credentials. Ctrl+C cancels the script.
 5. Keep MDMesh Agent visible and the phone unlocked until enrollment completes.
    Enrollment automatically grants precise/background location and enables GPS,
    alongside Usage Access and Alarms & reminders. Each permission is verified.
@@ -31,6 +38,15 @@ device with valid Device Owner is confirmed without minting another token.
 
 Grant-Permissions.cmd: grant and verify Usage Access, Alarms & reminders, precise/background location, and enable GPS
 for an already installed Agent, without API login or another enrollment.
+Diagnose-Accounts.cmd: inspect current Android accounts and users/profiles only.
+Manage-Accounts.cmd: choose an account by provider/name/profile, open settings,
+then press Enter after removing/signing out on the phone to check again.
+HONOR/HUAWEI ID opens its account app when available, otherwise general Settings;
+use the manufacturer's account entry to sign out. Other providers open Android
+sync/account settings. If unavailable, the helper falls back to general Settings.
+Android can hide login names; the helper explains this and checks provider/profile
+counts. Apps can recreate accounts. Never use WhatsApp's Delete my account to
+resolve enrollment; back up/verify chat recovery before considering uninstallation.
 Setup.cmd: verify/restore the portable tools only.
 
 A device can only be set as Device Owner when Android allows it. Remove all
@@ -57,6 +73,9 @@ The helper never clears app data, overwrites another server, or factory-resets a
 CMD usage (optional):
   Enroll.cmd --serial DEVICE_SERIAL
   Enroll.cmd --base-url https://mdm.example.com
+  Enroll.cmd --enroll
+  Enroll.cmd --diagnose-accounts
+  Enroll.cmd --manage-accounts
   Grant-Permissions.cmd --serial DEVICE_SERIAL
 
 The .env may contain the console password. Only enrollment settings are copied
